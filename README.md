@@ -257,3 +257,7 @@ If you’re thinking of running it on life-support equipment — **maybe don’t
 Happy dimming! 😎
 
 ---
+
+
+![Downloads](https://img.shields.io/github/downloads/pioter1234567/DimScreenSaver_thinkpad_keyboard/total)
+
