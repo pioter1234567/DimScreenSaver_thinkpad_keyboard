@@ -2,6 +2,8 @@
 
 **DimScreenSaver** to inteligentny ściemniacz ekranu dla systemu Windows, który automatycznie przyciemnia ekran po okresie bezczynności, wyłącza i automatycznie przywraca podświetlenie klawiatury w Lenovo ThinkPad T470 (możliwe, że na innych też). Program działa w tle jako aplikacja w trayu i oferuje pełną kontrolę nad zachowaniem systemu podczas nieaktywności.
 
+Wersja release - gotowa do zainstalowania ze wszystkim co potrzeba - dostępna po prawej stronie w zakładce Releases
+
 ## 🔧 Funkcje
 
 - Automatyczne przyciemnianie ekranu po ustawionym interwale bezczynności
@@ -126,6 +128,8 @@ Miłego przygaszania! 😎
 # DimScreenSaver
 
 **DimScreenSaver** is an intelligent screen dimmer for Windows that automatically dims the display after a period of inactivity and controls the keyboard backlight for Levovo ThinkPad T470 (other models possibly too). The app runs silently in the system tray and offers full control over screen behavior when the user is idle.
+
+Release version that includes everything you need for the program to work is available in Releases section on the right hand side.
 
 ## 🔧 Features
 
