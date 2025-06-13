@@ -1,0 +1,485 @@
+using AxWMPLib;
+using DimScreenSaver;
+using NAudio.Wave;
+using System;
+using System.Collections.Generic;
+using System.Drawing;
+using System.IO;
+using System.Linq;
+using System.Runtime.InteropServices;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+
+
+
+
+
+public class FormVideoPlayer : Form
+{
+
+
+    private Point globalCursorAtStart;
+    private readonly InnerVideoForm inner;
+    private bool innerAlreadyShown = false;
+    [DllImport("user32.dll")]
+    private static extern bool GetCursorPos(out Point lpPoint);
+    private static IntPtr hookID = IntPtr.Zero;
+    private static LowLevelKeyboardProc proc;
+
+    private delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelKeyboardProc lpfn, IntPtr hMod, uint dwThreadId);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool UnhookWindowsHookEx(IntPtr hhk);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("kernel32.dll")]
+    private static extern IntPtr GetModuleHandle(string lpModuleName);
+    private bool alreadyClosing = false;
+    private const int WH_KEYBOARD_LL = 13;
+    private const int WM_KEYDOWN = 0x0100;
+    private Point initialCursor;
+    private System.Windows.Forms.Timer movementCheckTimer;
+
+    public FormVideoPlayer(string videoPath)
+    {
+
+
+        GetCursorPos(out initialCursor);
+        if (IdleTrayApp.GlobalScreenOff)
+        {
+            DisplayControl.TurnOn();
+            LogVid("Ekran był wyłączony – wybudzam przez DisplayControl.TurnOn()");
+        }
+        LogVid("FormVideoPlayer start – sprawdzam GlobalScreenOff i DimForm");
+        if (Application.OpenForms["DimForm"] is Form dim)
+        {
+            LogVid("Zamykam istniejący DimForm przy starcie FormVideoPlayer");
+            try { dim.Close(); } catch { }
+        }
+
+
+
+        this.FormBorderStyle = FormBorderStyle.None;
+        this.StartPosition = FormStartPosition.Manual;
+        this.Size = new Size(1, 1);
+        this.Opacity = 0.0;
+        this.BackColor = Color.Black;
+        this.TopMost = true;
+        this.ShowInTaskbar = false;
+
+        // 🖱️ Zapisz pozycję kursora przy starcie
+        GetCursorPos(out initialCursor);
+
+        // 🔄 Timer do sprawdzania globalnego ruchu myszy
+        movementCheckTimer = new System.Windows.Forms.Timer { Interval = 100 };
+        movementCheckTimer.Tick += (s, e) =>
+        {
+            try
+            {
+                if (!GetCursorPos(out Point current))
+                    return;
+
+                int dx = Math.Abs(current.X - initialCursor.X);
+                int dy = Math.Abs(current.Y - initialCursor.Y);
+
+                if (dx > 2 || dy > 2)
+                {
+                    LogVid($"🖱️ Ruch myszy wykryty (Δx={dx}, Δy={dy}) – zamykam obie formy");
+                    ZamknijObieFormy();
+                }
+            }
+            catch (Exception ex)
+            {
+                LogVid($"❌ Błąd w movementCheckTimer: {ex.Message}");
+            }
+        };
+        movementCheckTimer.Start();
+
+
+        // pokaż filmik w osobnej formie
+        inner = new InnerVideoForm(videoPath);
+        this.Load += async (_, __) =>
+        {
+
+
+            await Task.Delay(20_000);
+
+            if (alreadyClosing || this.IsDisposed || inner == null || inner.IsDisposed)
+            {
+                LogVid("▶ Nie pokazuję InnerVideoForm – forma już zamknięta");
+                return;
+            }
+
+            try
+            {
+                LogVid("▶ Minęło 20 sekund – pokazuję InnerVideoForm z filmem");
+                if (!innerAlreadyShown)
+                {
+                    innerAlreadyShown = true;
+                    inner.Show();
+                    LogVid("▶ InnerVideoForm pokazany po raz pierwszy");
+                }
+                else
+                {
+                    LogVid("❗ InnerVideoForm już był pokazany – ignoruję kolejne wywołanie");
+                }
+                await Task.Delay(50); // chwila na odpalenie
+
+                this.TopMost = true;
+                this.BringToFront();
+                this.Activate();
+
+                LogVid("▶ Ustawiam FormVideoPlayer z powrotem na TopMost i Focus po InnerForm");
+
+
+            }
+            catch (Exception ex)
+            {
+                LogVid($"❌ Błąd przy inner.Show(): {ex.Message}");
+            }
+        };
+
+
+
+
+
+
+
+        // łapanie poruszenia myszką
+        this.MouseMove += CheckMouseDelta;
+        this.KeyDown += (_, __) => ZamknijObieFormy();
+
+
+        var timer = new System.Windows.Forms.Timer { Interval = 2000 };
+        timer.Tick += (s, e) =>
+        {
+            timer.Stop();
+
+            if (this.IsDisposed || !this.IsHandleCreated)
+            {
+                LogVid("🔕 Forma została wcześniej zamknięta – nie odtwarzam dźwięku notif.wav");
+                return;
+            }
+
+            try
+            {
+                string soundPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "notif.wav");
+
+                if (File.Exists(soundPath))
+                {
+                    var reader = new AudioFileReader(soundPath);
+                    var waveOut = new WaveOutEvent();
+                    waveOut.Init(reader);
+                    waveOut.Volume = 1.0f;
+                    waveOut.Play();
+
+                    
+                    waveOut.PlaybackStopped += (sender2, args2) =>
+                    {
+                        reader.Dispose();
+                        waveOut.Dispose();
+                    };
+
+                    LogVid("🔔 Dźwięk notyfikacji został zagrany (via NAudio).");
+                }
+                else
+                {
+                    LogVid("⚠️ Plik notif.wav nie istnieje – brak dźwięku.");
+                }
+            }
+            catch (Exception ex)
+            {
+                LogVid($"❌ Błąd przy odtwarzaniu notyfikacji (NAudio): {ex.Message}");
+            }
+        };
+        timer.Start();
+        proc = HookCallback;
+        hookID = SetHook(proc);
+
+        this.FormClosing += (s, e) =>
+        {
+            try
+            {
+                if (hookID != IntPtr.Zero)
+                {
+                    LogVid("🧹 FormClosing → zwalniam hook klawiatury");
+                    UnhookWindowsHookEx(hookID);
+                    hookID = IntPtr.Zero;
+                }
+            }
+            catch (Exception ex)
+            {
+                LogVid($"❌ Błąd przy zwalnianiu hooka: {ex.Message}");
+            }
+
+            if (!alreadyClosing)
+            {
+                LogVid("🧹 FormClosing → przekierowuję do ForceStopAndClose");
+            }
+        };
+
+        // 🧠 Zgłoś formę jako aktywną globalnie
+        IdleTrayApp.CurrentFormVideoPlayer = this;
+
+        // 🧹 Gdy ktoś zamknie formę ręcznie albo przez Close(), wyczyść referencję i ustaw flagę
+        this.FormClosed += (_, __) =>
+        {
+            IdleTrayApp.CurrentFormVideoPlayer = null;
+            IdleTrayApp.FormWasClosed = true;
+            LogVid("🧹 FormClosed → wyczyszczono CurrentFormVideoPlayer i ustawiono FormWasClosed");
+        };
+
+    }
+    public void SpróbujZamknąć(string źródło)
+    {
+        if (alreadyClosing)
+        {
+            LogVid($"🚫 Próba zamknięcia z \"{źródło}\" zignorowana – alreadyClosing = true");
+            return;
+        }
+
+        alreadyClosing = true;
+        LogVid($"✅ SpróbujZamknąć() wywołana z \"{źródło}\" – wykonuję ZamknijObieFormy()");
+        ZamknijObieFormy();
+    }
+    private static IntPtr SetHook(LowLevelKeyboardProc proc)
+    {
+        using (var curProcess = System.Diagnostics.Process.GetCurrentProcess())
+        using (var curModule = curProcess.MainModule)
+        {
+            return SetWindowsHookEx(WH_KEYBOARD_LL, proc, GetModuleHandle(curModule.ModuleName), 0);
+        }
+    }
+
+    private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
+    {
+        if (nCode >= 0 && wParam == (IntPtr)WM_KEYDOWN)
+        {
+            int vkCode = Marshal.ReadInt32(lParam);
+            LogVid($"⌨️ Naciśnięto klawisz globalnie: {vkCode} – próbuje zamknąć");
+            SpróbujZamknąć($"klawisz {vkCode}");
+        }
+
+        return CallNextHookEx(hookID, nCode, wParam, lParam);
+    }
+
+    public static void LogVid(string message)
+    {
+        string logFile = Path.Combine(Path.GetTempPath(), "scrlog.txt");
+        string logEntry = $"[FormVideoPlayer] {DateTime.Now:HH:mm:ss} {message}";
+
+        try
+        {
+            const int maxLines = 5000;
+
+            List<string> lines = new List<string>();
+            if (File.Exists(logFile))
+            {
+                lines = File.ReadAllLines(logFile).ToList();
+
+                if (lines.Count >= maxLines)
+                    lines = lines.Skip(lines.Count - (maxLines - 1)).ToList();
+            }
+
+            lines.Add(logEntry);
+            File.WriteAllLines(logFile, lines);
+        }
+        catch { }
+    }
+
+
+
+    private void CheckMouseDelta(object sender, MouseEventArgs e)
+    {
+        if (!GetCursorPos(out Point current))
+        {
+            LogVid("Nie udało się pobrać pozycji kursora");
+            return;
+        }
+
+        int dx = current.X - globalCursorAtStart.X;
+        int dy = current.Y - globalCursorAtStart.Y;
+
+        LogVid($"MouseMove → Δx: {dx}, Δy: {dy} (from {globalCursorAtStart.X},{globalCursorAtStart.Y} to {current.X},{current.Y})");
+
+        if ((dx == 0 && dy == 0) || (Math.Abs(dx) <= 2 && Math.Abs(dy) <= 2))
+        {
+            LogVid("Ruch systemowy (Δx ≤ 2, Δy ≤ 2) – ignoruję");
+            return;
+        }
+
+        LogVid("Ruch wykryty – próbuje zamknąć");
+        SpróbujZamknąć($"ruch myszy Δx={dx}, Δy={dy}");
+    }
+
+    private void ZamknijObieFormy()
+    {
+        try
+        {
+            if (this.InvokeRequired)
+            {
+                this.BeginInvoke((MethodInvoker)(() => ZamknijObieFormy()));
+                return;
+            }
+
+            if (alreadyClosing)
+            {
+                LogVid("🔁 ZamknijObieFormy() wywołana z alreadyClosing – kontynuuję zamykanie");
+            }
+            else
+            {
+                LogVid("🧹 ZamknijObieFormy() bez ustawionego alreadyClosing – wywołane myszką");
+            }
+
+            alreadyClosing = true;
+
+            LogVid("🧹 ZamknijObieFormy → rozpoczynam zamykanie formy i czyszczenie");
+
+            // zatrzymaj nasłuchiwanie ruchu myszy
+            movementCheckTimer?.Stop();
+            movementCheckTimer?.Dispose();
+            movementCheckTimer = null;
+
+            // zatrzymaj InnerForm (z dźwiękiem)
+            if (inner != null && !inner.IsDisposed)
+            {
+                inner.ForceStopAndClose();
+            }
+
+            // zwolnij hook klawiatury
+            try
+            {
+                if (hookID != IntPtr.Zero)
+                {
+                    UnhookWindowsHookEx(hookID);
+                    hookID = IntPtr.Zero;
+                }
+            }
+            catch (Exception ex)
+            {
+                LogVid($"❌ Błąd przy zwalnianiu hooka w ZamknijObieFormy: {ex.Message}");
+            }
+
+            try
+            {
+                this.Close();
+            }
+            finally
+            {
+                IdleTrayApp.Instance?.StartJavaFollowUpSequence();
+            }
+
+        }
+        catch (Exception ex)
+        {
+            LogVid($"❌ Błąd w ZamknijObieFormy: {ex.Message}");
+        }
+    }
+
+
+
+
+}
+
+public class InnerVideoForm : Form
+{
+    private readonly AxWindowsMediaPlayer _wmp;
+    private bool _isClosing = false;
+
+    public void ForceStopAndClose()
+    {
+        if (_isClosing) return;
+        _isClosing = true;
+
+        if (this.InvokeRequired)
+        {
+            this.BeginInvoke((MethodInvoker)(() => ForceStopAndClose()));
+            return;
+        }
+
+        try
+        {
+            FormVideoPlayer.LogVid("⛔ ForceStopAndClose → rozpoczynam zatrzymywanie...");
+
+            try
+            {
+                if (_wmp != null)
+                {
+                    
+                    bool isReady = _wmp.Created && _wmp.IsHandleCreated;
+
+                    if (isReady && _wmp.playState == WMPLib.WMPPlayState.wmppsPlaying)
+                    {
+                        FormVideoPlayer.LogVid("⏹ MediaPlayer gra – zatrzymuję...");
+                        _wmp.Ctlcontrols.stop();
+                        Thread.Sleep(100);
+                    }
+
+                    if (isReady)
+                    {
+                        _wmp.close();
+                        FormVideoPlayer.LogVid("✅ MediaPlayer zutylizowany");
+                    }
+                    else
+                    {
+                        FormVideoPlayer.LogVid("⚠️ MediaPlayer nie był gotowy do zatrzymania (jeszcze nie wystartował)");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                FormVideoPlayer.LogVid($"❌ Błąd podczas zatrzymywania: {ex.Message}");
+            }
+
+            this.Close();
+            FormVideoPlayer.LogVid("❌ Forma zamknięta...");
+        }
+        catch (Exception ex)
+        {
+            FormVideoPlayer.LogVid($"❌ Błąd główny w ForceStopAndClose: {ex.Message}");
+        }
+        IdleTrayApp.CurrentFormVideoPlayer = null;
+
+    }
+
+
+    public InnerVideoForm(string videoPath)
+    {
+        this.FormBorderStyle = FormBorderStyle.None;
+        this.StartPosition = FormStartPosition.Manual;
+        this.Size = new Size(480, 360);
+        this.TopMost = true;
+        this.BackColor = Color.Black;
+        this.ShowInTaskbar = false;
+
+        var screen = Screen.PrimaryScreen.WorkingArea;
+        this.Left = (screen.Width - this.Width) / 2;
+        this.Top = (screen.Height - this.Height) / 2;
+
+        _wmp = new AxWindowsMediaPlayer { Dock = DockStyle.Fill };
+
+        _wmp.HandleCreated += (s, e) =>
+        {
+            _wmp.uiMode = "none";
+            _wmp.settings.setMode("loop", true);
+            _wmp.settings.autoStart = true;
+            _wmp.URL = videoPath;
+        };
+
+        this.Controls.Add(_wmp);
+
+        this.Load += (s, e) =>
+        {
+            FormVideoPlayer.LogVid("▶ Próba odpalenia WMP...");
+        };
+
+
+    }
+}

@@ -1,0 +1,118 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
+
+	<PropertyGroup>
+		<OutputType>WinExe</OutputType>
+		<TargetFramework>net48</TargetFramework>
+		<UseWindowsForms>true</UseWindowsForms>
+		<ApplicationIcon>dim.ico</ApplicationIcon>
+		<Platforms>x86</Platforms>
+		<ApplicationManifest>app.manifest</ApplicationManifest>
+	</PropertyGroup>
+
+	<ItemGroup>
+	  <None Remove="pending.png" />
+	</ItemGroup>
+
+
+
+	<ItemGroup>
+		<Reference Include="PresentationCore" />
+		<Reference Include="PresentationFramework" />
+		<Reference Include="WindowsBase" />
+		<Reference Include="System.Xaml" />
+		<Reference Include="System.Management" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<EmbeddedResource Include="onlyoff.ico" />
+		<EmbeddedResource Include="dim.ico" />
+		<EmbeddedResource Include="off.ico" />
+		<EmbeddedResource Include="10s.ico" />
+		<EmbeddedResource Include="30s.ico" />
+		<EmbeddedResource Include="1m.ico" />
+		<EmbeddedResource Include="2m.ico" />
+		<EmbeddedResource Include="5m.ico" />
+		<EmbeddedResource Include="10m.ico" />
+		<EmbeddedResource Include="30m.ico" />
+		<EmbeddedResource Include="pending.png" />
+		<EmbeddedResource Include="Resources\\level0.png" />
+		<EmbeddedResource Include="Resources\\level1.png" />
+		<EmbeddedResource Include="Resources\\level2.png" />
+		<EmbeddedResource Include="Resources\\brightnessbar.png" />
+		<EmbeddedResource Include="Resources\BrightnessIcons\*.png" />
+		
+	</ItemGroup>
+
+	<ItemGroup>
+		<COMReference Include="WMPLib">
+			<VersionMinor>0</VersionMinor>
+			<VersionMajor>1</VersionMajor>
+			<Guid>6bf52a50-394a-11d3-b153-00c04f79faa6</Guid>
+			<Lcid>0</Lcid>
+			<WrapperTool>tlbimp</WrapperTool>
+			<Isolated>false</Isolated>
+			<EmbedInteropTypes>true</EmbedInteropTypes>
+		</COMReference>
+		<COMReference Include="AxWMPLib">
+			<WrapperTool>aximp</WrapperTool>
+			<VersionMinor>0</VersionMinor>
+			<VersionMajor>1</VersionMajor>
+			<Guid>6bf52a50-394a-11d3-b153-00c04f79faa6</Guid>
+			<Lcid>0</Lcid>
+			<Isolated>false</Isolated>
+		</COMReference>
+		<COMReference Include="MediaPlayer">
+			<WrapperTool>tlbimp</WrapperTool>
+			<VersionMinor>0</VersionMinor>
+			<VersionMajor>1</VersionMajor>
+			<Guid>22d6f304-b0f6-11d0-94ab-0080c74c7e95</Guid>
+			<Lcid>0</Lcid>
+			<Isolated>false</Isolated>
+			<EmbedInteropTypes>true</EmbedInteropTypes>
+		</COMReference>
+		<COMReference Include="WMPDXMLib">
+			<WrapperTool>tlbimp</WrapperTool>
+			<VersionMinor>0</VersionMinor>
+			<VersionMajor>1</VersionMajor>
+			<Guid>73f0dd5c-d071-46b6-a8bf-897c84eaac49</Guid>
+			<Lcid>0</Lcid>
+			<Isolated>false</Isolated>
+			<EmbedInteropTypes>true</EmbedInteropTypes>
+		</COMReference>
+		<COMReference Include="WMPLauncher">
+			<WrapperTool>tlbimp</WrapperTool>
+			<VersionMinor>0</VersionMinor>
+			<VersionMajor>1</VersionMajor>
+			<Guid>5cb42160-cd7c-4806-9367-1c4a65153f4a</Guid>
+			<Lcid>0</Lcid>
+			<Isolated>false</Isolated>
+			<EmbedInteropTypes>true</EmbedInteropTypes>
+		</COMReference>
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="NAudio" Version="2.2.1" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Compile Update="Properties\Resources.Designer.cs">
+		  <DesignTime>True</DesignTime>
+		  <AutoGen>True</AutoGen>
+		  <DependentUpon>Resources.resx</DependentUpon>
+		</Compile>
+		<Compile Update="Properties\Settings.Designer.cs">
+			<DesignTimeSharedInput>True</DesignTimeSharedInput>
+			<AutoGen>True</AutoGen>
+			<DependentUpon>Settings.settings</DependentUpon>
+		</Compile>
+		<EmbeddedResource Update="Properties\Resources.resx">
+		  <Generator>ResXFileCodeGenerator</Generator>
+		  <LastGenOutput>Resources.Designer.cs</LastGenOutput>
+		</EmbeddedResource>
+		<None Update="Properties\Settings.settings">
+			<Generator>SettingsSingleFileGenerator</Generator>
+			<LastGenOutput>Settings.Designer.cs</LastGenOutput>
+		</None>
+	</ItemGroup>
+
+</Project>

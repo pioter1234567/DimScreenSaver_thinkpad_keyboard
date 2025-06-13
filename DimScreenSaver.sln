@@ -1,0 +1,30 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.2.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DimScreenSaver", "DimScreenSaver.csproj", "{FC7DC946-29FE-969E-1251-EF921DC51175}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Debug|x86 = Debug|x86
+		Release|Any CPU = Release|Any CPU
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{FC7DC946-29FE-969E-1251-EF921DC51175}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FC7DC946-29FE-969E-1251-EF921DC51175}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FC7DC946-29FE-969E-1251-EF921DC51175}.Debug|x86.ActiveCfg = Debug|x86
+		{FC7DC946-29FE-969E-1251-EF921DC51175}.Debug|x86.Build.0 = Debug|x86
+		{FC7DC946-29FE-969E-1251-EF921DC51175}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FC7DC946-29FE-969E-1251-EF921DC51175}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FC7DC946-29FE-969E-1251-EF921DC51175}.Release|x86.ActiveCfg = Release|x86
+		{FC7DC946-29FE-969E-1251-EF921DC51175}.Release|x86.Build.0 = Release|x86
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {DBB3727B-763D-4C23-B4C4-90F64D3DE0B0}
+	EndGlobalSection
+EndGlobal
