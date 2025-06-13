@@ -1,1 +1,0 @@
-poprawic ustawianie jasnosci klawiatury na ticku -> po wlaczeniu ekranu sie nie zapala zrobic po wlaczeniu ekranu force set
