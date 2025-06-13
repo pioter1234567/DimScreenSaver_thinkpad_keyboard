@@ -4,6 +4,11 @@
 
 Wersja release - gotowa do zainstalowania ze wszystkim co potrzeba - dostępna po prawej stronie w zakładce Releases
 
+Uwaga: Ponieważ jest to projekt hobbystyczny nie posiada płatnych certyfikatów z holywoodu i Windows Defender będzie wyświetlał ostrzeżenie, że plik może być niebezpieczny - należy wtedy kliknąć więcej opcji Uruchm mimo to. 
+Avast skanuje przez około minutę i wyświetla brak zagrożeń. Program dostępny open-sourcowo, więc w razie wątpliwości/obaw można przejrzeć kod i skompilować samodzielnie.
+
+
+
 ## 🔧 Funkcje
 
 - Automatyczne przyciemnianie ekranu po ustawionym interwale bezczynności
@@ -130,6 +135,10 @@ Miłego przygaszania! 😎
 **DimScreenSaver** is an intelligent screen dimmer for Windows that automatically dims the display after a period of inactivity and controls the keyboard backlight for Levovo ThinkPad T470 (other models possibly too). The app runs silently in the system tray and offers full control over screen behavior when the user is idle.
 
 Release version that includes everything you need for the program to work is available in Releases section on the right hand side.
+
+Note: Since this is a hobby project, it doesn't include any paid Hollywood-grade certificates. As a result, Windows Defender may show a warning that the file could be unsafe — in that case, click "More info" → "Run anyway."
+Avast scans it for about a minute and then confirms no threats.
+The program is available as open source, so if you have any doubts or concerns, you can review the code and build it yourself.
 
 ## 🔧 Features
 
