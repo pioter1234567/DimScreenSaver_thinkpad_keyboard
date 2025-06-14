@@ -70,11 +70,11 @@ namespace DimScreenSaver
         private System.Threading.Timer javaFollowUpTimer;
         private PowerBroadcastWatcher powerWatcher;
         public bool monitorJavaDialog = true;
-        private bool isWatchdogRestarting = false;
         private bool isTickRunning = false;
         private static Queue<DateTime> recentTicks = new Queue<DateTime>();
         private static object tickLock = new object();
         private static bool isPopupResetInProgress = false;
+
 
         // 5. 📛 Ikony i menu trayowe
         private NotifyIcon trayIcon;
@@ -221,6 +221,8 @@ namespace DimScreenSaver
                 {
                     try
                     {
+                  
+
                         if (isTemporarilyDisabled || dimFormActive || GlobalScreenOff)
                         {
                             var powody = new List<string>();
@@ -242,40 +244,10 @@ namespace DimScreenSaver
                         var diff = DateTime.Now - last.Value;
                         if (diff.TotalMinutes > 1)
                         {
-                            if (isWatchdogRestarting)
-                            {
-                                LogIdle("⛔ Watchdog już restartuje timer – pomijam");
-                                return;
-                            }
-
-                            isWatchdogRestarting = true;
-
-                            LogIdle("🐶 Watchdog Idle: brak ticka – restartuję monitorowanie.");
-
-                            guiInvoker?.BeginInvoke(new Action(() =>
-                            {
-                                try
-                                {
-                                    idleCheckTimerPublic?.Stop();
-                                    if (idleCheckTimerPublic != null) idleCheckTimerPublic.Tick -= IdleCheckTimer_Tick;
-                                    idleCheckTimerPublic?.Dispose();
-
-                                    idleCheckTimerPublic = new System.Windows.Forms.Timer { Interval = 7000 };
-                                    idleCheckTimerPublic.Tick += IdleCheckTimer_Tick;
-                                    idleCheckTimerPublic.Start();
-
-                                    idleCheckTimer = idleCheckTimerPublic;
-                                    LogIdle("♻️ Watchdog Idle: Timer odtworzony na GUI wątku.");
-                                }
-                                catch (Exception ex)
-                                {
-                                    LogIdle($"❌ Watchdog Idle: wyjątek w BeginInvoke – {ex.Message}");
-                                }
-                                finally
-                                {
-                                    isWatchdogRestarting = false;
-                                }
-                            }));
+                            LogIdle("💣 Watchdog Idle: brak ticka – restartuję aplikacje.");
+                            trayIcon.Visible = false;
+                            Application.Restart();
+                            Environment.Exit(0);
                         }
                         else
                         {
@@ -647,7 +619,29 @@ namespace DimScreenSaver
                 var videoForm = new FormVideoPlayer(videoPath);
                 videoForm.Show();
             };
-            menu.Items.Insert(0, simulateJavaItem);
+            menu.Items.Insert(0, simulateJavaItem);*/
+
+            /*
+            var stopIdleTickItem = new ToolStripMenuItem("⏸️ Test: zatrzymaj idleCheckTimer");
+            StyleMenuItem(stopIdleTickItem);
+            stopIdleTickItem.Click += (s, e) =>
+            {
+                LogIdle("⏸️ Testowy przycisk → zatrzymuję idleCheckTimer");
+
+                if (idleCheckTimerPublic != null)
+                {
+                    idleCheckTimerPublic.Stop();
+                    idleCheckTimerPublic.Tick -= IdleCheckTimer_Tick;
+                    idleCheckTimerPublic.Dispose();
+                    idleCheckTimerPublic = null;
+                }
+
+                idleCheckTimer = null;
+            };
+            menu.Items.Add(stopIdleTickItem);
+            */
+
+
             /*
 
             // 🧪 Test czkawki ticka
