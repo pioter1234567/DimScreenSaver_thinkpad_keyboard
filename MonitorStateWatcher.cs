@@ -39,6 +39,7 @@ namespace DimScreenSaver
         }
 
         // Logi
+        private static void Log(string msg) => AppLogger.Log("MonitorStateWatcher", msg);
         private static void LogMonitor(string message)
         {
             string logFile = logPath;
@@ -103,9 +104,15 @@ namespace DimScreenSaver
                             IsMonitorOn = isOn;
 
                             if (isOn)
+                            {
                                 OnMonitorTurnedOn?.Invoke();
+                                Log("🟢 Ekran fizycznie się WŁĄCZYŁ");
+                            }
                             else
+                            {
                                 OnMonitorTurnedOff?.Invoke();
+                                Log("🔴 [MonitorStateWatcher] Ekran fizycznie się WYŁĄCZYŁ");
+                            }
                         }
                     }
                 }

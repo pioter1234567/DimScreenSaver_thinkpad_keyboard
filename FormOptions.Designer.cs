@@ -38,10 +38,10 @@ namespace DimScreenSaver
             this.groupBoxBacklight = new System.Windows.Forms.GroupBox();
             this.groupBoxCurrentBrightness = new System.Windows.Forms.GroupBox();
             this.btnClose = new System.Windows.Forms.Button();
-            this.linkLabel1 = new System.Windows.Forms.LinkLabel();
             this.chkAutoClose = new System.Windows.Forms.CheckBox();
             this.panel1 = new System.Windows.Forms.Panel();
             this.brightnessEditor = new DimScreenSaver.BrightnessLevelEditor();
+            this.linkLabel1 = new System.Windows.Forms.LinkLabel();
             this.groupBoxTest.SuspendLayout();
             this.groupBoxMode.SuspendLayout();
             this.panel_z_regulacja.SuspendLayout();
@@ -316,18 +316,6 @@ namespace DimScreenSaver
             this.btnClose.UseVisualStyleBackColor = true;
             this.btnClose.Click += new System.EventHandler(this.Button1_Click);
             // 
-            // linkLabel1
-            // 
-            this.linkLabel1.AutoSize = true;
-            this.linkLabel1.BackColor = System.Drawing.Color.Transparent;
-            this.linkLabel1.Location = new System.Drawing.Point(12, 258);
-            this.linkLabel1.Name = "linkLabel1";
-            this.linkLabel1.Size = new System.Drawing.Size(124, 13);
-            this.linkLabel1.TabIndex = 34;
-            this.linkLabel1.TabStop = true;
-            this.linkLabel1.Text = "Buy author a coffee :) ☕";
-            this.linkLabel1.LinkClicked += new System.Windows.Forms.LinkLabelLinkClickedEventHandler(this.LinkLabel1_LinkClicked);
-            // 
             // chkAutoClose
             // 
             this.chkAutoClose.AutoSize = true;
@@ -361,6 +349,18 @@ namespace DimScreenSaver
             this.brightnessEditor.Padding = new System.Windows.Forms.Padding(10);
             this.brightnessEditor.Size = new System.Drawing.Size(300, 46);
             this.brightnessEditor.TabIndex = 6;
+            // 
+            // linkLabel1
+            // 
+            this.linkLabel1.AutoSize = true;
+            this.linkLabel1.BackColor = System.Drawing.Color.Transparent;
+            this.linkLabel1.Location = new System.Drawing.Point(12, 258);
+            this.linkLabel1.Name = "linkLabel1";
+            this.linkLabel1.Size = new System.Drawing.Size(124, 13);
+            this.linkLabel1.TabIndex = 34;
+            this.linkLabel1.TabStop = true;
+            this.linkLabel1.Text = "Buy author a coffee :) ☕";
+            this.linkLabel1.LinkClicked += new System.Windows.Forms.LinkLabelLinkClickedEventHandler(this.LinkLabel1_LinkClicked);
             // 
             // FormOptions
             // 
@@ -423,8 +423,8 @@ namespace DimScreenSaver
         private Button btnClose;
         private Panel panel_z_regulacja;
         private BrightnessLevelEditor brightnessEditor;
-        private LinkLabel linkLabel1;
         private CheckBox chkAutoClose;
         private Panel panel1;
+        private LinkLabel linkLabel1;
     }
 }

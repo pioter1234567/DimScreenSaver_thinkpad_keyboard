@@ -55,12 +55,12 @@ public class FormWakeup : Form
         if (IdleTrayApp.GlobalScreenOff)
         {
             DisplayControl.TurnOn();
-            LogWakeup("Ekran był wyłączony – wybudzam przez DisplayControl.TurnOn()");
+            Log("Ekran był wyłączony – wybudzam przez DisplayControl.TurnOn()");
         }
-        LogWakeup("FormWakeup start – sprawdzam GlobalScreenOff i DimForm");
+        Log("FormWakeup start – sprawdzam GlobalScreenOff i DimForm");
         if (Application.OpenForms["DimForm"] is Form dim)
         {
-            LogWakeup("Zamykam istniejący DimForm przy starcie FormWakeup");
+            Log("Zamykam istniejący DimForm przy starcie FormWakeup");
             try { dim.Close(); } catch { }
         }
 
@@ -76,7 +76,7 @@ public class FormWakeup : Form
         this.FormClosed += (_, __) =>
         {
             IdleTrayApp.CurrentFormWakeup = null;
-            LogWakeup("🧹 FormWakeup zamknięty – referencja wyczyszczona");
+            Log("🧹 FormWakeup zamknięty – referencja wyczyszczona");
         };
 
         // 🖱️ Zapisz pozycję kursora przy starcie
@@ -96,13 +96,13 @@ public class FormWakeup : Form
 
                 if (dx > 2 || dy > 2)
                 {
-                    LogWakeup($"🖱️ Ruch myszy wykryty (Δx={dx}, Δy={dy}) – zamykam obie formy");
+                    Log($"🖱️ Ruch myszy wykryty (Δx={dx}, Δy={dy}) – zamykam obie formy");
                     ZamknijObieFormy();
                 }
             }
             catch (Exception ex)
             {
-                LogWakeup($"❌ Błąd w movementCheckTimer: {ex.Message}");
+                Log($"❌ Błąd w movementCheckTimer: {ex.Message}");
             }
         };
         movementCheckTimer.Start();
@@ -118,22 +118,22 @@ public class FormWakeup : Form
 
             if (alreadyClosing || this.IsDisposed || inner == null || inner.IsDisposed)
             {
-                LogWakeup("▶ Nie pokazuję InnerWakeupForm – forma już zamknięta");
+                Log("▶ Nie pokazuję InnerWakeupForm – forma już zamknięta");
                 return;
             }
 
             try
             {
-                LogWakeup("▶ Minęło 5 sekund – pokazuję InnerWakeupForm z filmem");
+                Log("▶ Minęło 5 sekund – pokazuję InnerWakeupForm z filmem");
                 if (!innerAlreadyShown)
                 {
                     innerAlreadyShown = true;
                     inner.Show();
-                    LogWakeup("▶ InnerWakeupForm  pokazany po raz pierwszy");
+                    Log("▶ InnerWakeupForm  pokazany po raz pierwszy");
                 }
                 else
                 {
-                    LogWakeup("❗ InnerWakeupForm już był pokazany – ignoruję kolejne wywołanie");
+                    Log("❗ InnerWakeupForm już był pokazany – ignoruję kolejne wywołanie");
                 }
                 await Task.Delay(50); // daj mu chwilę na odpalenie
 
@@ -141,13 +141,13 @@ public class FormWakeup : Form
                 this.BringToFront();
                 this.Activate();
 
-                LogWakeup("▶ Ustawiam FormWakeup z powrotem na TopMost i Focus po InnerForm");
+                Log("▶ Ustawiam FormWakeup z powrotem na TopMost i Focus po InnerForm");
 
 
             }
             catch (Exception ex)
             {
-                LogWakeup($"❌ Błąd przy inner.Show(): {ex.Message}");
+                Log($"❌ Błąd przy inner.Show(): {ex.Message}");
             }
         };
 
@@ -172,19 +172,19 @@ public class FormWakeup : Form
             {
                 if (hookID != IntPtr.Zero)
                 {
-                    LogWakeup("🧹 FormClosing → zwalniam hook klawiatury");
+                    Log("🧹 FormClosing → zwalniam hook klawiatury");
                     UnhookWindowsHookEx(hookID);
                     hookID = IntPtr.Zero;
                 }
             }
             catch (Exception ex)
             {
-                LogWakeup($"❌ Błąd przy zwalnianiu hooka: {ex.Message}");
+                Log($"❌ Błąd przy zwalnianiu hooka: {ex.Message}");
             }
 
             if (!alreadyClosing)
             {
-                LogWakeup("🧹 FormClosing → przekierowuję do ForceStopAndClose");
+                Log("🧹 FormClosing → przekierowuję do ForceStopAndClose");
             }
         };
 
@@ -197,12 +197,12 @@ public class FormWakeup : Form
     {
         if (alreadyClosing)
         {
-            LogWakeup($"🚫 Próba zamknięcia z \"{źródło}\" zignorowana – alreadyClosing = true");
+            Log($"🚫 Próba zamknięcia z \"{źródło}\" zignorowana – alreadyClosing = true");
             return;
         }
 
         alreadyClosing = true;
-        LogWakeup($"✅ SpróbujZamknąć() wywołana z \"{źródło}\" – wykonuję ZamknijObieFormy()");
+        Log($"✅ SpróbujZamknąć() wywołana z \"{źródło}\" – wykonuję ZamknijObieFormy()");
         ZamknijObieFormy();
     }
     private static IntPtr SetHook(LowLevelKeyboardProc proc)
@@ -219,13 +219,14 @@ public class FormWakeup : Form
         if (nCode >= 0 && wParam == (IntPtr)WM_KEYDOWN)
         {
             int vkCode = Marshal.ReadInt32(lParam);
-            LogWakeup($"⌨️ Naciśnięto klawisz globalnie: {vkCode} – próbuje zamknąć");
+            Log($"⌨️ Naciśnięto klawisz globalnie: {vkCode} – próbuje zamknąć");
             SpróbujZamknąć($"klawisz {vkCode}");
         }
 
         return CallNextHookEx(hookID, nCode, wParam, lParam);
     }
 
+    private static void Log(string msg) => AppLogger.Log("FormWakeup", msg);
     public static void LogWakeup(string message)
     {
         string logFile = Path.Combine(Path.GetTempPath(), "scrlog.txt");
@@ -256,22 +257,22 @@ public class FormWakeup : Form
     {
         if (!GetCursorPos(out Point current))
         {
-            LogWakeup("Nie udało się pobrać pozycji kursora");
+            Log("Nie udało się pobrać pozycji kursora");
             return;
         }
 
         int dx = current.X - globalCursorAtStart.X;
         int dy = current.Y - globalCursorAtStart.Y;
 
-        LogWakeup($"MouseMove → Δx: {dx}, Δy: {dy} (from {globalCursorAtStart.X},{globalCursorAtStart.Y} to {current.X},{current.Y})");
+        Log($"MouseMove → Δx: {dx}, Δy: {dy} (from {globalCursorAtStart.X},{globalCursorAtStart.Y} to {current.X},{current.Y})");
 
         if ((dx == 0 && dy == 0) || (Math.Abs(dx) <= 2 && Math.Abs(dy) <= 2))
         {
-            LogWakeup("Ruch systemowy (Δx ≤ 2, Δy ≤ 2) – ignoruję");
+            Log("Ruch systemowy (Δx ≤ 2, Δy ≤ 2) – ignoruję");
             return;
         }
 
-        LogWakeup("Ruch wykryty – próbuje zamknąć");
+        Log("Ruch wykryty – próbuje zamknąć");
         SpróbujZamknąć($"ruch myszy Δx={dx}, Δy={dy}");
     }
 
@@ -287,16 +288,16 @@ public class FormWakeup : Form
 
             if (alreadyClosing)
             {
-                LogWakeup("🔁 ZamknijObieFormy() wywołana z alreadyClosing – kontynuuję zamykanie");
+                Log("🔁 ZamknijObieFormy() wywołana z alreadyClosing – kontynuuję zamykanie");
             }
             else
             {
-                LogWakeup("🧹 ZamknijObieFormy() bez ustawionego alreadyClosing – wywołane myszką");
+                Log("🧹 ZamknijObieFormy() bez ustawionego alreadyClosing – wywołane myszką");
             }
 
             alreadyClosing = true;
 
-            LogWakeup("🧹 ZamknijObieFormy → rozpoczynam zamykanie formy i czyszczenie");
+            Log("🧹 ZamknijObieFormy → rozpoczynam zamykanie formy i czyszczenie");
 
             // zatrzymaj nasłuchiwanie ruchu myszy
             movementCheckTimer?.Stop();
@@ -320,7 +321,7 @@ public class FormWakeup : Form
             }
             catch (Exception ex)
             {
-                LogWakeup($"❌ Błąd przy zwalnianiu hooka w ZamknijObieFormy: {ex.Message}");
+                Log($"❌ Błąd przy zwalnianiu hooka w ZamknijObieFormy: {ex.Message}");
             }
 
             try
@@ -335,7 +336,7 @@ public class FormWakeup : Form
         }
         catch (Exception ex)
         {
-            LogWakeup($"❌ Błąd w ZamknijObieFormy: {ex.Message}");
+            Log($"❌ Błąd w ZamknijObieFormy: {ex.Message}");
         }
     }
 
@@ -348,6 +349,7 @@ public class InnerWakeupForm : Form
 {
     private readonly AxWindowsMediaPlayer _wmp;
     private bool _isClosing = false;
+    private static void Log(string msg) => AppLogger.Log("InnerWakeupForm", msg);
 
     public void ForceStopAndClose()
     {
@@ -362,7 +364,7 @@ public class InnerWakeupForm : Form
 
         try
         {
-            FormWakeup.LogWakeup("⛔ ForceStopAndClose → rozpoczynam zatrzymywanie...");
+            Log("⛔ ForceStopAndClose → rozpoczynam zatrzymywanie...");
 
             try
             {
@@ -373,7 +375,7 @@ public class InnerWakeupForm : Form
 
                     if (isReady && _wmp.playState == WMPLib.WMPPlayState.wmppsPlaying)
                     {
-                        FormWakeup.LogWakeup("⏹ MediaPlayer gra – zatrzymuję...");
+                        Log("⏹ MediaPlayer gra – zatrzymuję...");
                         _wmp.Ctlcontrols.stop();
                         Thread.Sleep(100);
                     }
@@ -381,25 +383,25 @@ public class InnerWakeupForm : Form
                     if (isReady)
                     {
                         _wmp.close();
-                        FormWakeup.LogWakeup("✅ MediaPlayer zutylizowany");
+                        Log("✅ MediaPlayer zutylizowany");
                     }
                     else
                     {
-                        FormWakeup.LogWakeup("⚠️ MediaPlayer nie był gotowy do zatrzymania (jeszcze nie wystartował)");
+                        Log("⚠️ MediaPlayer nie był gotowy do zatrzymania (jeszcze nie wystartował)");
                     }
                 }
             }
             catch (Exception ex)
             {
-                FormWakeup.LogWakeup($"❌ Błąd podczas zatrzymywania: {ex.Message}");
+               Log($"❌ Błąd podczas zatrzymywania: {ex.Message}");
             }
 
             this.Close();
-            FormWakeup.LogWakeup("❌ Forma zamknięta...");
+            Log("❌ Forma zamknięta...");
         }
         catch (Exception ex)
         {
-            FormWakeup.LogWakeup($"❌ Błąd główny w ForceStopAndClose: {ex.Message}");
+           Log($"❌ Błąd główny w ForceStopAndClose: {ex.Message}");
         }
 
 
@@ -432,7 +434,7 @@ public class InnerWakeupForm : Form
 
         this.Load += (s, e) =>
         {
-            FormWakeup.LogWakeup("▶ Próba odpalenia WMP...");
+            Log("▶ Próba odpalenia WMP...");
         };
 
 

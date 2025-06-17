@@ -46,6 +46,7 @@ public class FormVideoPlayer : Form
     private const int WM_KEYDOWN = 0x0100;
     private Point initialCursor;
     private System.Windows.Forms.Timer movementCheckTimer;
+    private static void Log(string msg) => AppLogger.Log("FormVideoPlayer", msg);
 
     public FormVideoPlayer(string videoPath)
     {
@@ -55,12 +56,12 @@ public class FormVideoPlayer : Form
         if (IdleTrayApp.GlobalScreenOff)
         {
             DisplayControl.TurnOn();
-            LogVid("Ekran był wyłączony – wybudzam przez DisplayControl.TurnOn()");
+            Log("Ekran był wyłączony – wybudzam przez DisplayControl.TurnOn()");
         }
-        LogVid("FormVideoPlayer start – sprawdzam GlobalScreenOff i DimForm");
+        Log("FormVideoPlayer start – sprawdzam GlobalScreenOff i DimForm");
         if (Application.OpenForms["DimForm"] is Form dim)
         {
-            LogVid("Zamykam istniejący DimForm przy starcie FormVideoPlayer");
+            Log("Zamykam istniejący DimForm przy starcie FormVideoPlayer");
             try { dim.Close(); } catch { }
         }
 
@@ -91,13 +92,13 @@ public class FormVideoPlayer : Form
 
                 if (dx > 2 || dy > 2)
                 {
-                    LogVid($"🖱️ Ruch myszy wykryty (Δx={dx}, Δy={dy}) – zamykam obie formy");
+                    Log($"🖱️ Ruch myszy wykryty (Δx={dx}, Δy={dy}) – zamykam obie formy");
                     ZamknijObieFormy();
                 }
             }
             catch (Exception ex)
             {
-                LogVid($"❌ Błąd w movementCheckTimer: {ex.Message}");
+                Log($"❌ Błąd w movementCheckTimer: {ex.Message}");
             }
         };
         movementCheckTimer.Start();
@@ -113,22 +114,22 @@ public class FormVideoPlayer : Form
 
             if (alreadyClosing || this.IsDisposed || inner == null || inner.IsDisposed)
             {
-                LogVid("▶ Nie pokazuję InnerVideoForm – forma już zamknięta");
+                Log("▶ Nie pokazuję InnerVideoForm – forma już zamknięta");
                 return;
             }
 
             try
             {
-                LogVid("▶ Minęło 20 sekund – pokazuję InnerVideoForm z filmem");
+                Log("▶ Minęło 20 sekund – pokazuję InnerVideoForm z filmem");
                 if (!innerAlreadyShown)
                 {
                     innerAlreadyShown = true;
                     inner.Show();
-                    LogVid("▶ InnerVideoForm pokazany po raz pierwszy");
+                    Log("▶ InnerVideoForm pokazany po raz pierwszy");
                 }
                 else
                 {
-                    LogVid("❗ InnerVideoForm już był pokazany – ignoruję kolejne wywołanie");
+                    Log("❗ InnerVideoForm już był pokazany – ignoruję kolejne wywołanie");
                 }
                 await Task.Delay(50); // chwila na odpalenie
 
@@ -136,13 +137,13 @@ public class FormVideoPlayer : Form
                 this.BringToFront();
                 this.Activate();
 
-                LogVid("▶ Ustawiam FormVideoPlayer z powrotem na TopMost i Focus po InnerForm");
+                Log("▶ Ustawiam FormVideoPlayer z powrotem na TopMost i Focus po InnerForm");
 
 
             }
             catch (Exception ex)
             {
-                LogVid($"❌ Błąd przy inner.Show(): {ex.Message}");
+                Log($"❌ Błąd przy inner.Show(): {ex.Message}");
             }
         };
 
@@ -164,7 +165,7 @@ public class FormVideoPlayer : Form
 
             if (this.IsDisposed || !this.IsHandleCreated)
             {
-                LogVid("🔕 Forma została wcześniej zamknięta – nie odtwarzam dźwięku notif.wav");
+                Log("🔕 Forma została wcześniej zamknięta – nie odtwarzam dźwięku notif.wav");
                 return;
             }
 
@@ -187,16 +188,16 @@ public class FormVideoPlayer : Form
                         waveOut.Dispose();
                     };
 
-                    LogVid("🔔 Dźwięk notyfikacji został zagrany (via NAudio).");
+                    Log("🔔 Dźwięk notyfikacji został zagrany (via NAudio).");
                 }
                 else
                 {
-                    LogVid("⚠️ Plik notif.wav nie istnieje – brak dźwięku.");
+                    Log("⚠️ Plik notif.wav nie istnieje – brak dźwięku.");
                 }
             }
             catch (Exception ex)
             {
-                LogVid($"❌ Błąd przy odtwarzaniu notyfikacji (NAudio): {ex.Message}");
+                Log($"❌ Błąd przy odtwarzaniu notyfikacji (NAudio): {ex.Message}");
             }
         };
         timer.Start();
@@ -209,19 +210,19 @@ public class FormVideoPlayer : Form
             {
                 if (hookID != IntPtr.Zero)
                 {
-                    LogVid("🧹 FormClosing → zwalniam hook klawiatury");
+                    Log("🧹 FormClosing → zwalniam hook klawiatury");
                     UnhookWindowsHookEx(hookID);
                     hookID = IntPtr.Zero;
                 }
             }
             catch (Exception ex)
             {
-                LogVid($"❌ Błąd przy zwalnianiu hooka: {ex.Message}");
+                Log($"❌ Błąd przy zwalnianiu hooka: {ex.Message}");
             }
 
             if (!alreadyClosing)
             {
-                LogVid("🧹 FormClosing → przekierowuję do ForceStopAndClose");
+                Log("🧹 FormClosing → przekierowuję do ForceStopAndClose");
             }
         };
 
@@ -233,7 +234,7 @@ public class FormVideoPlayer : Form
         {
             IdleTrayApp.CurrentFormVideoPlayer = null;
             IdleTrayApp.FormWasClosed = true;
-            LogVid("🧹 FormClosed → wyczyszczono CurrentFormVideoPlayer i ustawiono FormWasClosed");
+            Log("🧹 FormClosed → wyczyszczono CurrentFormVideoPlayer i ustawiono FormWasClosed");
         };
 
     }
@@ -241,12 +242,12 @@ public class FormVideoPlayer : Form
     {
         if (alreadyClosing)
         {
-            LogVid($"🚫 Próba zamknięcia z \"{źródło}\" zignorowana – alreadyClosing = true");
+            Log($"🚫 Próba zamknięcia z \"{źródło}\" zignorowana – alreadyClosing = true");
             return;
         }
 
         alreadyClosing = true;
-        LogVid($"✅ SpróbujZamknąć() wywołana z \"{źródło}\" – wykonuję ZamknijObieFormy()");
+        Log($"✅ SpróbujZamknąć() wywołana z \"{źródło}\" – wykonuję ZamknijObieFormy()");
         ZamknijObieFormy();
     }
     private static IntPtr SetHook(LowLevelKeyboardProc proc)
@@ -263,14 +264,14 @@ public class FormVideoPlayer : Form
         if (nCode >= 0 && wParam == (IntPtr)WM_KEYDOWN)
         {
             int vkCode = Marshal.ReadInt32(lParam);
-            LogVid($"⌨️ Naciśnięto klawisz globalnie: {vkCode} – próbuje zamknąć");
+            Log($"⌨️ Naciśnięto klawisz globalnie: {vkCode} – próbuje zamknąć");
             SpróbujZamknąć($"klawisz {vkCode}");
         }
 
         return CallNextHookEx(hookID, nCode, wParam, lParam);
     }
 
-    public static void LogVid(string message)
+    public static void LogVideo(string message)
     {
         string logFile = Path.Combine(Path.GetTempPath(), "scrlog.txt");
         string logEntry = $"[FormVideoPlayer] {DateTime.Now:HH:mm:ss} {message}";
@@ -300,22 +301,22 @@ public class FormVideoPlayer : Form
     {
         if (!GetCursorPos(out Point current))
         {
-            LogVid("Nie udało się pobrać pozycji kursora");
+            Log("Nie udało się pobrać pozycji kursora");
             return;
         }
 
         int dx = current.X - globalCursorAtStart.X;
         int dy = current.Y - globalCursorAtStart.Y;
 
-        LogVid($"MouseMove → Δx: {dx}, Δy: {dy} (from {globalCursorAtStart.X},{globalCursorAtStart.Y} to {current.X},{current.Y})");
+        Log($"MouseMove → Δx: {dx}, Δy: {dy} (from {globalCursorAtStart.X},{globalCursorAtStart.Y} to {current.X},{current.Y})");
 
         if ((dx == 0 && dy == 0) || (Math.Abs(dx) <= 2 && Math.Abs(dy) <= 2))
         {
-            LogVid("Ruch systemowy (Δx ≤ 2, Δy ≤ 2) – ignoruję");
+            Log("Ruch systemowy (Δx ≤ 2, Δy ≤ 2) – ignoruję");
             return;
         }
 
-        LogVid("Ruch wykryty – próbuje zamknąć");
+        Log("Ruch wykryty – próbuje zamknąć");
         SpróbujZamknąć($"ruch myszy Δx={dx}, Δy={dy}");
     }
 
@@ -331,16 +332,16 @@ public class FormVideoPlayer : Form
 
             if (alreadyClosing)
             {
-                LogVid("🔁 ZamknijObieFormy() wywołana z alreadyClosing – kontynuuję zamykanie");
+                Log("🔁 ZamknijObieFormy() wywołana z alreadyClosing – kontynuuję zamykanie");
             }
             else
             {
-                LogVid("🧹 ZamknijObieFormy() bez ustawionego alreadyClosing – wywołane myszką");
+                Log("🧹 ZamknijObieFormy() bez ustawionego alreadyClosing – wywołane myszką");
             }
 
             alreadyClosing = true;
 
-            LogVid("🧹 ZamknijObieFormy → rozpoczynam zamykanie formy i czyszczenie");
+            Log("🧹 ZamknijObieFormy → rozpoczynam zamykanie formy i czyszczenie");
 
             // zatrzymaj nasłuchiwanie ruchu myszy
             movementCheckTimer?.Stop();
@@ -364,7 +365,7 @@ public class FormVideoPlayer : Form
             }
             catch (Exception ex)
             {
-                LogVid($"❌ Błąd przy zwalnianiu hooka w ZamknijObieFormy: {ex.Message}");
+                Log($"❌ Błąd przy zwalnianiu hooka w ZamknijObieFormy: {ex.Message}");
             }
 
             try
@@ -379,7 +380,7 @@ public class FormVideoPlayer : Form
         }
         catch (Exception ex)
         {
-            LogVid($"❌ Błąd w ZamknijObieFormy: {ex.Message}");
+            Log($"❌ Błąd w ZamknijObieFormy: {ex.Message}");
         }
     }
 
@@ -392,7 +393,7 @@ public class InnerVideoForm : Form
 {
     private readonly AxWindowsMediaPlayer _wmp;
     private bool _isClosing = false;
-
+    private static void Log(string msg) => AppLogger.Log("InnerVideoForm", msg);
     public void ForceStopAndClose()
     {
         if (_isClosing) return;
@@ -406,7 +407,7 @@ public class InnerVideoForm : Form
 
         try
         {
-            FormVideoPlayer.LogVid("⛔ ForceStopAndClose → rozpoczynam zatrzymywanie...");
+            Log("⛔ ForceStopAndClose → rozpoczynam zatrzymywanie...");
 
             try
             {
@@ -417,7 +418,7 @@ public class InnerVideoForm : Form
 
                     if (isReady && _wmp.playState == WMPLib.WMPPlayState.wmppsPlaying)
                     {
-                        FormVideoPlayer.LogVid("⏹ MediaPlayer gra – zatrzymuję...");
+                        Log("⏹ MediaPlayer gra – zatrzymuję...");
                         _wmp.Ctlcontrols.stop();
                         Thread.Sleep(100);
                     }
@@ -425,25 +426,25 @@ public class InnerVideoForm : Form
                     if (isReady)
                     {
                         _wmp.close();
-                        FormVideoPlayer.LogVid("✅ MediaPlayer zutylizowany");
+                        Log("✅ MediaPlayer zutylizowany");
                     }
                     else
                     {
-                        FormVideoPlayer.LogVid("⚠️ MediaPlayer nie był gotowy do zatrzymania (jeszcze nie wystartował)");
+                        Log("⚠️ MediaPlayer nie był gotowy do zatrzymania (jeszcze nie wystartował)");
                     }
                 }
             }
             catch (Exception ex)
             {
-                FormVideoPlayer.LogVid($"❌ Błąd podczas zatrzymywania: {ex.Message}");
+               Log($"❌ Błąd podczas zatrzymywania: {ex.Message}");
             }
 
             this.Close();
-            FormVideoPlayer.LogVid("❌ Forma zamknięta...");
+            Log("❌ Forma zamknięta...");
         }
         catch (Exception ex)
         {
-            FormVideoPlayer.LogVid($"❌ Błąd główny w ForceStopAndClose: {ex.Message}");
+            Log($"❌ Błąd główny w ForceStopAndClose: {ex.Message}");
         }
         IdleTrayApp.CurrentFormVideoPlayer = null;
 
@@ -477,7 +478,7 @@ public class InnerVideoForm : Form
 
         this.Load += (s, e) =>
         {
-            FormVideoPlayer.LogVid("▶ Próba odpalenia WMP...");
+            Log("▶ Próba odpalenia WMP...");
         };
 
 

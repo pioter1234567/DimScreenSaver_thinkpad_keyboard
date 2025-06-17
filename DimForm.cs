@@ -29,7 +29,7 @@ namespace DimScreenSaver
         private bool isClosingIntended = false;
         private DateTime? screenOffTimerStartedAt = null;
         private int screenOffDelaySeconds = 0;
-
+        private static void Log(string msg) => AppLogger.Log("DimForm", msg);
         private void LogDim(string message)
         {
             string logEntry = $"[DimForm] {DateTime.Now:HH:mm:ss} {message}";
@@ -71,7 +71,7 @@ namespace DimScreenSaver
             }
             catch (Exception ex)
             {
-                LogDim($"[GetWakeOnAudioFlag] Błąd: {ex.Message}");
+                Log($"[GetWakeOnAudioFlag] Błąd: {ex.Message}");
             }
 
             return true; 
@@ -82,7 +82,7 @@ namespace DimScreenSaver
             if (screenOffTimer != null && screenOffTimer.Enabled)
             {
                 screenOffTimer.Stop();
-                LogDim($"📛 screenOffTimer zatrzymany ({reason})");
+                Log($"📛 screenOffTimer zatrzymany ({reason})");
             }
         }
 
@@ -104,13 +104,13 @@ namespace DimScreenSaver
             this.Visible = false;
             this.Opacity = 0.0;
 
-            try { LogDim("Form uruchomiona"); } catch { }
+            try { Log("Form uruchomiona"); } catch { }
 
             this.MouseMove += (s, e) =>
             {
                 if (!GetCursorPos(out Point current))
                 {
-                    LogDim("MouseMove → nie udało się pobrać pozycji globalnej");
+                    Log("MouseMove → nie udało się pobrać pozycji globalnej");
                     return;
                 }
 
@@ -122,7 +122,7 @@ namespace DimScreenSaver
                    return; //ignorowanie ruchu o 0px
                 }
 
-                LogDim($"EVENT: MouseMove → Δx: {dx}, Δy: {dy} (from {globalCursorAtStart.X},{globalCursorAtStart.Y} to {current.X},{current.Y})");
+                Log($"EVENT: MouseMove → Δx: {dx}, Δy: {dy} (from {globalCursorAtStart.X},{globalCursorAtStart.Y} to {current.X},{current.Y})");
 
                 CheckAndClose(s, e);
             };
@@ -130,12 +130,12 @@ namespace DimScreenSaver
 
             this.KeyDown += (s, e) =>
             {
-                LogDim("EVENT: KeyDown");
+                Log("EVENT: KeyDown");
                 CheckAndClose(s, e);
             };
             this.MouseClick += (s, e) =>
             {
-                LogDim("EVENT: MouseClick");
+                Log("EVENT: MouseClick");
                 CheckAndClose(s, e);
             };
 
@@ -147,7 +147,7 @@ namespace DimScreenSaver
             {
                 allowClose = true;
                 allowCloseTimer.Stop();
-                LogDim($"Upłynęło {(allowCloseTimer.Interval / 1000.0):0.##} sek. – allowClose = true");
+                Log($"Upłynęło {(allowCloseTimer.Interval / 1000.0):0.##} sek. – allowClose = true");
             };
             allowCloseTimer.Start();
 
@@ -170,23 +170,23 @@ namespace DimScreenSaver
 
                         if (!IdleTrayApp.GlobalScreenOff)
                         {
-                            LogDim("screenOffTimer.Tick → wyłączam ekran");
+                            Log("screenOffTimer.Tick → wyłączam ekran");
                             DisplayControl.TurnOff();
                             screenTurnedOff = true;
                             IdleTrayApp.GlobalScreenOff = true;
                         }
                         else
                         {
-                            LogDim("screenOffTimer.Tick → pomijam TurnOff (już wyłączony)");
+                            Log("screenOffTimer.Tick → pomijam TurnOff (już wyłączony)");
                         }
 
-                        LogDim("screenOffTimer.Tick → zamykanie DimForm będzie obsługiwane przez MonitorStateWatcher");
+                        Log("screenOffTimer.Tick → zamykanie DimForm będzie obsługiwane przez MonitorStateWatcher");
                     };
                     screenOffTimer.Start();
                 }
                 else
                 {
-                    LogDim("screenOffTimer: natychmiastowe wyłączenie");
+                    Log("screenOffTimer: natychmiastowe wyłączenie");
                     DisplayControl.TurnOff();
                     screenTurnedOff = true;
                     IdleTrayApp.GlobalScreenOff = true;
@@ -198,45 +198,45 @@ namespace DimScreenSaver
             this.Load += async (s, e) =>
             {
                 GetCursorPos(out globalCursorAtStart);
-                LogDim($"Pozycja kursora przy wejściu: {globalCursorAtStart.X},{globalCursorAtStart.Y}");
+                Log($"Pozycja kursora przy wejściu: {globalCursorAtStart.X},{globalCursorAtStart.Y}");
                 try
                 {
                     if (File.Exists(brightnessPath) && int.TryParse(File.ReadAllText(brightnessPath), out int saved))
                     {
                         previousBrightness = saved;
-                        LogDim($"[LOAD] Odczytano jasność z pliku: {saved}%");
+                        Log($"[LOAD] Odczytano jasność z pliku: {saved}%");
                     }
                     else
                     {
                         previousBrightness = 75;
-                        LogDim("[LOAD] Nie znaleziono brightness.txt – fallback do 75%");
+                        Log("[LOAD] Nie znaleziono brightness.txt – fallback do 75%");
                     }
                 }
                 catch
                 {
                     previousBrightness = 75;
-                    LogDim("[LOAD] Błąd odczytu brightness.txt – fallback do 75%");
+                    Log("[LOAD] Błąd odczytu brightness.txt – fallback do 75%");
                 }
 
                 // 🔒 Przygaszanie tylko jeśli nie closeImmediately
                 if (!closeImmediately)
                 {
                     await IdleTrayApp.SetBrightnessAsync(dimLevel);
-                    LogDim($"Ustawiam jasność (WMI): {dimLevel}%");
+                    Log($"Ustawiam jasność (WMI): {dimLevel}%");
                     try
                     {
                         IdleTrayApp.Instance?.keyboard?.Set(0);
-                        LogDim("🎹 Wyłączono podświetlenie klawiatury");
+                        Log("🎹 Wyłączono podświetlenie klawiatury");
                     }
                     catch (Exception ex)
                     {
-                        LogDim($"Błąd wyłączania klawiatury: {ex.Message}");
+                        Log($"Błąd wyłączania klawiatury: {ex.Message}");
                     }
 
                 }
                 else
                 {
-                    LogDim("Pominięto przygaszanie – closeImmediately aktywne");
+                    Log("Pominięto przygaszanie – closeImmediately aktywne");
                 }
 
 
@@ -253,7 +253,7 @@ namespace DimScreenSaver
 
                 if (closeImmediately)
                 {
-                    LogDim("closeImmediately → zamknięcie formy od razu");
+                    Log("closeImmediately → zamknięcie formy od razu");
                     screenTurnedOff = true;
                     this.Close();
                     return;
@@ -265,7 +265,7 @@ namespace DimScreenSaver
                     bool wakeOnAudio = GetWakeOnAudioFlag();
                     bool playing = AudioWatcher.IsAudioPlaying();
 
-                    LogDim($"[dimFormMonitor] Tick → WakeOnAudio: {wakeOnAudio}, IsAudioPlaying: {playing}");
+                    Log($"[dimFormMonitor] Tick → WakeOnAudio: {wakeOnAudio}, IsAudioPlaying: {playing}");
 
                     if (screenOffTimer != null && screenOffTimer.Enabled && screenOffTimerStartedAt.HasValue)
                     {
@@ -273,13 +273,13 @@ namespace DimScreenSaver
                         var remaining = screenOffDelaySeconds - elapsed;
                         remaining = Math.Max(0, remaining);
 
-                        LogDim($"screenOffTimer.Tick → upłynęło {elapsed:F0}s z {screenOffDelaySeconds}s (pozostało {remaining:F0}s)");
+                        Log($"screenOffTimer.Tick → upłynęło {elapsed:F0}s z {screenOffDelaySeconds}s (pozostało {remaining:F0}s)");
                     }
 
 
                     if (wakeOnAudio && playing)
                     {
-                        LogDim("🎵 Wykryto dźwięk – zamykam formę (dimFormMonitor)");
+                        Log("🎵 Wykryto dźwięk – zamykam formę (dimFormMonitor)");
                         CheckAndClose(snd, evt);
                     }
                 };
@@ -294,12 +294,21 @@ namespace DimScreenSaver
 
                 try
                 {
-                    await IdleTrayApp.SetBrightnessAsync(previousBrightness);
-                    LogDim($"[FromClosed] Przywracam jasność (WMI): {previousBrightness}%");
+                    if (BatterySaverChecker.IsBatterySaverActive())
+                    {
+                        await IdleTrayApp.Instance.RestoreBrightnessWithBatterySaverCompensation(previousBrightness);
+                        Log($"[FormClosed] Jasność przywrócona z uwzględnieniem battery saver: {previousBrightness}%");
+                    }
+                    else
+                    {
+                        await IdleTrayApp.SetBrightnessAsync(previousBrightness);
+                        Log($"[FromClosed] Przywracam jasność (WMI): {previousBrightness}%");
+                    }
+
                 }
                 catch (Exception ex)
                 {
-                    try { LogDim($"[FormClosed] Błąd przywracania jasności: {ex.Message}"); } catch { }
+                    try { Log($"[FormClosed] Błąd przywracania jasności: {ex.Message}"); } catch { }
                 }
 
                 if (screenTurnedOff)
@@ -307,18 +316,18 @@ namespace DimScreenSaver
                     IdleTrayApp.WaitForUserActivity = true;
                     IdleTrayApp.idleCheckTimerPublic?.Stop();
                     IdleTrayApp.idleCheckTimerPublic = IdleTrayApp.idleCheckTimer;
-                    LogDim($"[FormClosed] screenTurnedOff → WaitForUserActivity = {IdleTrayApp.WaitForUserActivity}");
-                    LogDim("🎹 Pominięto przywracanie klawiatury – ekran został wyłączony");
+                    Log($"[FormClosed] screenTurnedOff → WaitForUserActivity = {IdleTrayApp.WaitForUserActivity}");
+                    Log("🎹 Pominięto przywracanie klawiatury – ekran został wyłączony");
                 }
                 else
                 {
                     try
                     {
-                        IdleTrayApp.Instance?.SetKeyboardBacklightBasedOnBrightness(previousBrightness);
+                        IdleTrayApp.Instance?.SetKeyboardBacklightBasedOnBrightnessForce(previousBrightness);
                     }
                     catch (Exception ex)
                     {
-                        LogDim($"[FormClosed] Błąd przywracania klawiatury: {ex.Message}");
+                        Log($"[FormClosed] Błąd przywracania klawiatury: {ex.Message}");
                     }
                 }
 
@@ -331,7 +340,7 @@ namespace DimScreenSaver
                 dimFormMonitor?.Stop();
                 dimFormMonitor?.Dispose();
                 StopScreenOffTimer("FormClosed");
-                LogDim("[FormClosed] FormClosed zakończony – form zamknięty");
+                Log("[FormClosed] FormClosed zakończony – form zamknięty");
 
             };
 
@@ -342,8 +351,8 @@ namespace DimScreenSaver
 
                 if (!this.IsDisposed && this.Visible)
                 {
-                    LogDim("📛 DimForm zamknięta z OnGlobalReset z poziomu ResetIdle()");
-                    LogDim($"[OnGlobalReset] GlobalScreenOff = {IdleTrayApp.GlobalScreenOff}");
+                    Log("📛 DimForm zamknięta z OnGlobalReset z poziomu ResetIdle()");
+                    Log($"[OnGlobalReset] GlobalScreenOff = {IdleTrayApp.GlobalScreenOff}");
                     isClosingIntended = true;
                     this.Close();
 
@@ -356,7 +365,7 @@ namespace DimScreenSaver
         public void CloseFromScreenOff()
         {
             screenTurnedOff = true;
-            LogDim("Zamknięcie przez MonitorStateWatcher (ekran wyłączony)");
+            Log("Zamknięcie przez MonitorStateWatcher (ekran wyłączony)");
             isClosingIntended = true;
             this.Close();
         }
@@ -365,11 +374,11 @@ namespace DimScreenSaver
         {
             if (!allowClose)
             {
-                LogDim("CheckAndClose → interakcja zablokowana (allowClose = false)");
+                Log("CheckAndClose → interakcja zablokowana (allowClose = false)");
                 return;
             }
 
-            LogDim("CheckAndClose → interakcja użytkownika zaakceptowana (allowClose = true)");
+            Log("CheckAndClose → interakcja użytkownika zaakceptowana (allowClose = true)");
             WasClosedByUserInteraction = true;
 
             StopScreenOffTimer("CheckAndClose");
@@ -380,19 +389,19 @@ namespace DimScreenSaver
 
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
-            LogDim($"[OnFormClosing] Powód zamknięcia: {e.CloseReason}");
+            Log($"[OnFormClosing] Powód zamknięcia: {e.CloseReason}");
             if (!isClosingIntended && e.CloseReason == CloseReason.UserClosing)
-                LogDim("[OnFormClosing]⚠️ Forma zamykana przez użytkownika bez isClosingIntended (Alt+F4? Task Manager?).");
+                Log("[OnFormClosing]⚠️ Forma zamykana przez użytkownika bez isClosingIntended (Alt+F4? Task Manager?).");
             if (!isClosingIntended)
             {
-                LogDim("[OnFormClosing]🚫 Zamknięcie DimForm not intended.");
+                Log("[OnFormClosing]🚫 Zamknięcie DimForm not intended.");
 
                 //e.Cancel = true; //najpierw tylko logujemy, potem sprobujemy zablokowac
                 // return;         //najpierw tylko logujemy, potem sprobujemy zablokowac
             }
             else
             {
-                LogDim("[OnFormClosing]✅ Zamknięcie DimForm intended.");
+                Log("[OnFormClosing]✅ Zamknięcie DimForm intended.");
             }
 
                 base.OnFormClosing(e);

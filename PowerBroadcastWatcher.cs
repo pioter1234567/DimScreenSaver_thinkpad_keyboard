@@ -13,7 +13,7 @@ public class PowerBroadcastWatcher : NativeWindow
     private DateTime lastWakeDetect = DateTime.MinValue;
     private readonly Queue<int> msgSequence = new Queue<int>(3);
     private static readonly string logPath = Path.Combine(Path.GetTempPath(), "scrlog.txt");
-
+    private static void Log(string msg) => AppLogger.Log("PowerBroadcastWarcher", msg);
 
     private class HiddenForm : Form
     {
@@ -56,7 +56,7 @@ public class PowerBroadcastWatcher : NativeWindow
         form.CreateControl();         // wymusza utworzenie uchwytu
         AssignHandle(form.Handle);
 
-        LogPower("🔔 PowerBroadcastWatcher aktywny – nasłuchuję WM_POWERBROADCAST");
+        Log("🔔 PowerBroadcastWatcher aktywny – nasłuchuję WM_POWERBROADCAST");
     }
 
     protected override void WndProc(ref Message m)
@@ -66,7 +66,7 @@ public class PowerBroadcastWatcher : NativeWindow
         const int PBT_APMRESUMEAUTOMATIC = 0x0012;
 
         // 📜 Loguj każdy komunikat
-        LogPower($"🎯 NativeWindow: Msg=0x{m.Msg:X} WParam=0x{m.WParam.ToInt64():X} LParam=0x{m.LParam.ToInt64():X}");
+        Log($"🎯 NativeWindow: Msg=0x{m.Msg:X} WParam=0x{m.WParam.ToInt64():X} LParam=0x{m.LParam.ToInt64():X}");
 
         // 🔁 Rejestrujemy ostatnie 3 komunikaty
         msgSequence.Enqueue(m.Msg);
@@ -84,11 +84,12 @@ public class PowerBroadcastWatcher : NativeWindow
                 lastWakeDetect = DateTime.Now;
 
                 if (msgArray[0] == 0x7E && msgArray[1] == 0x46 && msgArray[2] == 0x24)
-                    LogPower("🟢 Wykryto sekwencję [GETTEXT, WINDOWPOSCHANGING, GETMINMAXINFO] → podniesiono klapę");
+                    Log("🟢 Wykryto sekwencję [GETTEXT, WINDOWPOSCHANGING, GETMINMAXINFO] → podniesiono klapę");
                 else
-                    LogPower("🔀 Wykryto te same 3 eventy [GETTEXT, WINDOWPOSCHANGING, GETMINMAXINFO], w innej kolejności → podniesiono klapę?");
+                    Log("🔀 Wykryto te same 3 eventy [GETTEXT, WINDOWPOSCHANGING, GETMINMAXINFO], w innej kolejności → podniesiono klapę?");
                 
                 IdleTrayApp.ClearWakeState();
+                
 
             }
         }
@@ -101,7 +102,7 @@ public class PowerBroadcastWatcher : NativeWindow
 
             if (wparam == PBT_APMRESUMESUSPEND || wparam == PBT_APMRESUMEAUTOMATIC)
             {
-                LogPower($"🟢 System wznowiony z uśpienia (PBT: 0x{wparam:X})");
+                Log($"🟢 System wznowiony z uśpienia (PBT: 0x{wparam:X})");
 
                 IdleTrayApp.ClearWakeState();
             }

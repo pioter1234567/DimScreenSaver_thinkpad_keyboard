@@ -13,6 +13,7 @@ using System.Runtime.InteropServices;
 
 
 
+
 public class BrightnessForm : Form
 {
     private readonly System.Windows.Forms.Timer fadeInTimer;
@@ -20,22 +21,33 @@ public class BrightnessForm : Form
     private readonly System.Windows.Forms.Timer brightnessPollTimer;
     private readonly System.Windows.Forms.Timer scrollTimer;
     private static readonly string logPath = Path.Combine(Path.GetTempPath(), "scrlog.txt");
-    private readonly CustomSlider slider;
-    private readonly Label valueLabel;
+    public readonly CustomSlider slider;
+    public readonly Label valueLabel;
     private readonly bool isAdjusting = false;
     private bool isUpdatingFromPolling = false;
     private DateTime brightnessSetAt = DateTime.MinValue;
     private DateTime mouseDownAt = DateTime.MinValue;
-    private bool scrollInProgress = false;
+    public bool scrollInProgress = false;
     private bool valueChangedSinceLastApply = false;
     private DateTime scrollStartedAt = DateTime.MinValue;
     private bool isBatterySaverActive = false;
     private readonly PictureBox brightnessIcon;
+    private readonly PictureBox batterySaverIcon;
+    public bool userInitiatedChange = false;
+    private int idleSecondsBrightnessForm = 0;
+    private DateTime lastUserInteraction;
+    private int userSetBrightness = -1;
+    private System.Windows.Forms.Timer postUserChangeTimer;
+
     [DllImport("Shcore.dll")]
     private static extern int GetDpiForMonitor(IntPtr hmonitor, int dpiType, out uint dpiX, out uint dpiY);
 
     [DllImport("User32.dll")]
     private static extern IntPtr MonitorFromWindow(IntPtr hwnd, int dwFlags);
+
+    private static void Log(string msg) => AppLogger.Log("BrightnessForm", msg);
+    private int lastSentValue = -1;
+    private System.Windows.Forms.Timer dragTimer;
 
 
 
@@ -95,21 +107,25 @@ public class BrightnessForm : Form
             scrollTimer?.Stop();
             scrollTimer?.Dispose();
 
+            dragTimer?.Stop();
+            dragTimer?.Dispose();
+
             brightnessPollTimer?.Stop();
             brightnessPollTimer?.Dispose();
         }
         base.Dispose(disposing);
     }
+    
     public BrightnessForm(int currentBrightness)
     {
 
-        Task.Run(() =>
+       /* Task.Run(() =>  // ZASTĄPIONE HOOKIEM WMI
         {
             isBatterySaverActive = BatterySaverChecker.IsBatterySaverActive();
             if (isBatterySaverActive)
-                LogBrightness("🔋 Battery Saver aktywny – polling zablokowany.");
+                Log("🔋 Battery Saver aktywny – polling zablokowany.");
         });
-
+       */
 
         this.Deactivate += (_, __) =>
         {
@@ -141,7 +157,7 @@ public class BrightnessForm : Form
         {
             Minimum = 0,
             Maximum = 100,
-            Value = IdleTrayApp.Instance?.lastPolledBrightness is int b && b >= 0 && b <= 100 ? b : currentBrightness,
+            Value = IdleTrayApp.Instance?.lastKnownBrightness is int b && b >= 0 && b <= 100 ? b : currentBrightness,
             Height = 30,
             Width = 226, // ustalona szerokość
             Location = new Point(10, 10), // odległość od lewej i od góry (X, Y)
@@ -151,39 +167,6 @@ public class BrightnessForm : Form
         };
 
 
-        int polled = IdleTrayApp.Instance?.lastPolledBrightness ?? -1;
-        int dimLevel = IdleTrayApp.Instance?.dimBrightnessPercent ?? -1;
-
-        if (polled == dimLevel)
-        {
-            LogBrightness($"⚠️ Pollowana jasność = {polled} równa dimBrightnessPercent – nie ustawiam slidera");
-        }
-        else if (polled >= 0 && polled <= 100)
-        {
-            slider.Value = polled;
-            LogBrightness($"🎚️ Ustawiam slider na start: {slider.Value} (lastPolledBrightness = {polled})");
-        }
-        else
-        {
-            slider.Value = currentBrightness;
-            LogBrightness($"🎚️ Ustawiam slider na fallback: {currentBrightness} (brak sensownej wartości z pollingu)");
-        }
-
-        //LogBrightness($"🎚️ Ustawiam slider na start: {slider.Value} (lastPolledBrightness = {IdleTrayApp.Instance?.lastPolledBrightness})");
-
-
-
-        valueLabel = new Label()
-        {
-            Text = currentBrightness.ToString(),
-            Font = new Font("Segoe UI", 10f, FontStyle.Bold),
-            ForeColor = System.Drawing.Color.Black,
-            Dock = DockStyle.Top,
-            Height = 22,
-            TextAlign = ContentAlignment.MiddleRight,
-            Padding = new Padding(0, 0, 10, 0)
-        };
-
 
 
 
@@ -191,64 +174,83 @@ public class BrightnessForm : Form
         {
             if (IdleTrayApp.dimFormActive)
             {
-                LogBrightness("🚫 Blokuję interakcję – DimForm aktywny (MouseDown)");
+                Log("🚫 Blokuję interakcję – DimForm aktywny (MouseDown)");
                 return;
             }
             else if (e.Button == MouseButtons.Left)
             {
+                userInitiatedChange = true;
                 mouseDownAt = DateTime.Now;
+                dragTimer.Start(); // ⬅️ startujemy timer
             }
         };
 
 
-        /*
+
         slider.MouseUp += async (s, e) =>
         {
-            if (e.Button == MouseButtons.Left && !isAdjusting)
+            if (e.Button == MouseButtons.Left)
             {
-                isAdjusting = true;
-                Cursor = Cursors.WaitCursor;
+                dragTimer.Stop(); // zatrzymujemy timer
 
-                int value = slider.Value;
-                await IdleTrayApp.SetBrightnessAsync(value);
-
-                var app = IdleTrayApp.Instance;
-                if (app != null)
+                if (userInitiatedChange && slider.Value != lastSentValue)
                 {
-                    app.SetKeyboardBacklightBasedOnBrightness(value);
-                    app.lastKnownBrightness = value;
+                    int value = slider.Value;
+                    lastSentValue = value;
+
+                    await IdleTrayApp.SetBrightnessAsync(value);
+
+                    var app = IdleTrayApp.Instance;
+                    if (app != null)
+                    {
+                        app.SetKeyboardBacklightBasedOnBrightnessForce(value);
+                        app.lastKnownBrightness = value;
+                        app.SetLastKnownBrightness(value);
+                    }
+
+                    brightnessSetAt = DateTime.Now;
+                    valueChangedSinceLastApply = false;
                 }
 
-                brightnessSetAt = DateTime.Now; // 🕒 Zablokuj polling na chwilę
-                Cursor = Cursors.Default;
-                isAdjusting = false;
+
+                _ = Task.Delay(500).ContinueWith(_ =>
+                {
+                    userInitiatedChange = false;
+                    //ScheduleBrightnessDropCheck();
+                }, TaskScheduler.FromCurrentSynchronizationContext());
             }
+        };
 
-        };*/
 
-        slider.MouseUp += async (s, e) =>
+
+
+
+
+
+        dragTimer = new System.Windows.Forms.Timer { Interval = 100 }; // co 150ms sprawdzanie
+        dragTimer.Tick += async (s, e) =>
         {
-            if (e.Button == MouseButtons.Left && valueChangedSinceLastApply)
-            {
-                valueChangedSinceLastApply = false;
-                int value = slider.Value;
-                await IdleTrayApp.SetBrightnessAsync(value);
+            if (IdleTrayApp.dimFormActive || !userInitiatedChange)
+                return;
 
+            int current = slider.Value;
+            if (current != lastSentValue)
+            {
+                lastSentValue = current;
+                await IdleTrayApp.SetBrightnessAsync(current);
                 var app = IdleTrayApp.Instance;
                 if (app != null)
                 {
-                    app.SetKeyboardBacklightBasedOnBrightness(value);
-                    app.lastKnownBrightness = value;
+                    app.SetKeyboardBacklightBasedOnBrightnessForce(current);
+                    app.lastKnownBrightness = current;
                 }
 
                 brightnessSetAt = DateTime.Now;
-                IdleTrayApp.Instance?.SetLastPolledBrightness(value);
+                IdleTrayApp.Instance?.SetLastKnownBrightness(current);
             }
         };
 
-
-
-        scrollTimer = new System.Windows.Forms.Timer { Interval = 400 };
+        scrollTimer = new System.Windows.Forms.Timer { Interval = 600 };
         scrollTimer.Tick += async (s, e) =>
         {
             scrollTimer.Stop();
@@ -256,19 +258,23 @@ public class BrightnessForm : Form
             {
                 scrollInProgress = false;
                 valueChangedSinceLastApply = false;
-
+                _ = Task.Delay(500).ContinueWith(_ =>
+                {
+                    userInitiatedChange = false;
+                    //ScheduleBrightnessDropCheck();
+                }, TaskScheduler.FromCurrentSynchronizationContext());
                 int value = slider.Value;
                 await IdleTrayApp.SetBrightnessAsync(value);
 
                 var app = IdleTrayApp.Instance;
                 if (app != null)
                 {
-                    app.SetKeyboardBacklightBasedOnBrightness(value);
+                    app.SetKeyboardBacklightBasedOnBrightnessForce(value);
                     app.lastKnownBrightness = value;
                 }
-
+            
                 brightnessSetAt = DateTime.Now;
-                IdleTrayApp.Instance?.SetLastPolledBrightness(value);
+                IdleTrayApp.Instance?.SetLastKnownBrightness(value);
             }
         };
 
@@ -278,7 +284,7 @@ public class BrightnessForm : Form
         {
             if (IdleTrayApp.dimFormActive)
             {
-                LogBrightness("🚫 Blokuję interakcję – DimForm aktywny (MouseWheel)");
+                Log("🚫 Blokuję interakcję – DimForm aktywny (MouseWheel)");
 
                 if (e is HandledMouseEventArgs handledEvent)
                     handledEvent.Handled = true;
@@ -286,6 +292,8 @@ public class BrightnessForm : Form
                 return;
             }
 
+
+            userInitiatedChange = true;
             scrollInProgress = true;
             scrollStartedAt = DateTime.Now;
             scrollTimer.Stop();
@@ -297,13 +305,21 @@ public class BrightnessForm : Form
         {
             if (IdleTrayApp.dimFormActive)
             {
-
-                LogBrightness("⛔ Ignoruję ValueChanged – DimForm aktywny");
+                Log("⛔ Ignoruję ValueChanged – DimForm aktywny");
                 return;
             }
+
             if (slider.InteractionLocked)
             {
-                LogBrightness("⛔ Ignoruję ValueChanged – suwak zablokowany");
+                Log("⛔ Ignoruję ValueChanged – suwak zablokowany");
+                return;
+            }
+
+            if (!userInitiatedChange)
+            {
+                // tylko update UI (labela, ikony itp.)
+                valueLabel.Text = slider.Value.ToString();
+                brightnessIcon.Image = GetBrightnessIcon(slider.Value);
                 return;
             }
 
@@ -336,21 +352,28 @@ public class BrightnessForm : Form
 
                 // zabezpieczenie przed nieprawidłową wartością
                 if (corrected >= slider.Minimum && corrected <= slider.Maximum)
+                    Log("🐔🐔🐔pseudonim KURKA 🐔🐔🐔🐔🐔🐔🐔🐔🐔");
                     slider.Value = corrected;
 
                 return;
             }
-
-            if (!isUpdatingFromPolling)
-                valueLabel.Text = val.ToString();
-
-            valueChangedSinceLastApply = true;
+            valueLabel.Text = val.ToString();
             brightnessIcon.Image = GetBrightnessIcon(val);
+            idleSecondsBrightnessForm = 0;
+            lastUserInteraction = DateTime.Now;
+
+
+
+            if (!dragTimer.Enabled)
+            {                  
+            valueChangedSinceLastApply = true; 
             scrollInProgress = true;
             scrollStartedAt = DateTime.Now;
             scrollTimer.Stop();
             scrollTimer.Start();
+            }
         };
+
 
 
 
@@ -374,6 +397,8 @@ public class BrightnessForm : Form
             Image = GetBrightnessIcon(currentBrightness)
         };
 
+     
+
 
         this.Padding = new Padding(1); // miejsce na ramkę
 
@@ -385,6 +410,9 @@ public class BrightnessForm : Form
         };
         mainPanel.Controls.Add(sliderPanel);
         mainPanel.Controls.Add(label);
+
+
+
         Controls.Clear();
         Controls.Add(mainPanel);
 
@@ -429,14 +457,54 @@ public class BrightnessForm : Form
         sliderContainer.Controls.Add(slider);
 
         // 4) Label z procentem
-        valueLabel.AutoSize = true;
-        valueLabel.TextAlign = ContentAlignment.MiddleLeft;
-        valueLabel.Font = new Font("Segoe UI", 18f, FontStyle.Regular);
-        valueLabel.Margin = new Padding(0, 7, 0, 0); // lekko w dół, odstęp od suwaka
+
+        valueLabel = new Label()
+        {
+            Text = currentBrightness.ToString(),
+            ForeColor = System.Drawing.Color.Black,
+            BackColor = Color.Transparent,
+            Dock = DockStyle.Top,
+            Height = 22,
+            AutoSize = true,
+            Visible = true,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Font = new Font("Segoe UI", 18f, FontStyle.Regular),
+            Margin = new Padding(0, 7, 10, 0),
+            Padding = new Padding(0, 0, 0, 0)
+        };
+
+        //ikonka
+        batterySaverIcon = new PictureBox
+        {
+            Size = new Size(36, 36),
+            SizeMode = PictureBoxSizeMode.Zoom,
+            Location = new Point(this.Width - 54, 10), // X: przy prawej krawędzi, Y: wysokość tytułu
+            Anchor = AnchorStyles.Top | AnchorStyles.Right,
+            Visible = false,
+            BackColor = Color.Transparent,
+            Image = GetBatterySaverIcon("BS.png")
+        };
+
+
+
+        /* // Kontener nakładający oba na siebie
+         var valueContainer = new Panel
+         {
+             Size = new Size(50, 60), // lub AutoSize = true jeśli preferujesz
+             Margin = new Padding(0, 7, 0, 0),
+             Padding = Padding.Empty
+         };*/
+
+        // Dodaj do kontenera
+        //valueContainer.Controls.Add(batterySaverIcon);
+        //valueContainer.Controls.Add(valueLabel);
+        valueLabel.BringToFront();
+
 
         // 5) Dodajemy wszystko do tabeli
         table.Controls.Add(brightnessIcon, 0, 0);
         table.Controls.Add(sliderContainer, 1, 0);
+     
         table.Controls.Add(valueLabel, 2, 0);
 
         // 6) Dodajemy do sliderPanel
@@ -452,6 +520,46 @@ public class BrightnessForm : Form
         // 8) Pozycjonujemy okno
         var workingArea = Screen.PrimaryScreen.WorkingArea;
         Location = new Point(workingArea.Right - Width - 0, workingArea.Bottom - Height - 0);
+
+        this.Controls.Add(batterySaverIcon);
+        batterySaverIcon.BringToFront();
+
+
+        batterySaverIcon.Visible = BatterySaverChecker.IsBatterySaverActive();
+
+        /*
+        if (BatterySaverChecker.IsBatterySaverActive())
+        {
+            valueLabel.Text = " ";
+            batterySaverIcon.Visible = true;
+            valueLabel.Visible = false;
+            Log("🔋 Battery Saver aktywny – nie ustawiam slidera, pokazuję puste");
+        }
+        else
+        {*/
+        int knownBrighthtness = IdleTrayApp.Instance?.lastKnownBrightness ?? -1;
+            int dimLevel = IdleTrayApp.Instance?.dimBrightnessPercent ?? -1;
+
+            if (knownBrighthtness == dimLevel)
+            {
+                Log($"⚠️ knownBrightness = {knownBrighthtness} równa dimBrightnessPercent {dimLevel} – nie ustawiam slidera");
+            }
+            else if (knownBrighthtness >= 0 && knownBrighthtness <= 100)
+            {
+            Log("🐸🐸🐸pseudonim ŻABKA🐸🐸🐸🐸🐸🐸🐸 ");
+            slider.Value = knownBrighthtness;
+                valueLabel.Text = knownBrighthtness.ToString();
+                Log($"🎚️ Ustawiam slider na start: {slider.Value} (lastKnownBrightness = {knownBrighthtness})");
+            }
+            else
+            {
+            Log("🐷🐷🐷pseudonim ŚWINKA🐷🐷🐷🐷🐷🐷🐷🐷 ");
+            slider.Value = currentBrightness;
+                valueLabel.Text = currentBrightness.ToString();
+                Log($"🎚️ Ustawiam slider na fallback: {currentBrightness} (brak sensownej wartości lastKnownBrightness )");
+            }
+       // }
+
 
 
 
@@ -477,30 +585,45 @@ public class BrightnessForm : Form
         fadeInTimer.Start();
         // 👀 Timer sprawdzający brak aktywności myszy
         autoCloseTimer = new System.Windows.Forms.Timer { Interval = 1000 };
-        int idleSeconds = 0;
+    
 
         autoCloseTimer.Tick += (s, e) =>
         {
-            idleSeconds++;
+            if (userInitiatedChange)
+            {
+                idleSecondsBrightnessForm = 0; // 👈 resetuj licznik – user nadal przesuwa
+                return;          // 👈 nie zamykaj formy
+            }
+
             Point cursor = Cursor.Position;
 
-            if (idleSeconds >= 40)
+            if (Bounds.Contains(cursor))
             {
-                LogBrightness("Auto close: 40s minęło – zamykam z myszką na formie");
+                idleSecondsBrightnessForm = 0; // reset jak myszka jest na formie
+            }
+            else
+            {
+                idleSecondsBrightnessForm++;
+            }
+
+            if (idleSecondsBrightnessForm >= 4)
+            {
+                Log("Auto close: myszka poza formą przez 4s – zamykam");
                 autoCloseTimer.Stop();
                 FadeOutThenClose();
                 return;
             }
 
-            if (!Bounds.Contains(cursor) && idleSeconds >= 4)
+            if ((DateTime.Now - lastUserInteraction).TotalSeconds >= 40)
             {
-                LogBrightness("Auto close: myszka poza formą przez 4s – zamykam");
+                Log("Auto close: 40s minęło – zamykam z myszką na formie");
                 autoCloseTimer.Stop();
                 FadeOutThenClose();
             }
         };
         autoCloseTimer.Start();
-
+        lastUserInteraction = DateTime.Now;
+        /* ZASTĄPIONE PRZEZ HOOK WMI
         brightnessPollTimer = new System.Windows.Forms.Timer { Interval = 500 };
         brightnessPollTimer.Tick += async (s, e) =>
         {
@@ -512,20 +635,20 @@ public class BrightnessForm : Form
             }
             if (IdleTrayApp.PreparingToDim)
             {
-                LogBrightness("⛔ PreparingToDim aktywne – pomijam polling");
+                Log("⛔ PreparingToDim aktywne – pomijam polling");
                 return;
             }
 
             if (IdleTrayApp.dimFormActive)
             {
-                LogBrightness("⛔ DimForm aktywny – pomijam polling jasności");
+                Log("⛔ DimForm aktywny – pomijam polling jasności");
                 return;
             }
 
             if (IdleTrayApp.Instance?.dimFormClosedAt is DateTime dt &&
                 (DateTime.Now - dt).TotalSeconds < 1.0)
             {
-                LogBrightness("⏳ Odczekuję 1s po zamknięciu DimForm – pomijam polling");
+                Log("⏳ Odczekuję 1s po zamknięciu DimForm – pomijam polling");
                 return;
             }
 
@@ -538,9 +661,9 @@ public class BrightnessForm : Form
 
             isUpdatingFromPolling = true;
 
-            LogBrightness($"🔄 Polluje jasność");
+            Log($"🔄 Polluje jasność");
             int current = await IdleTrayApp.GetCurrentBrightnessAsync();
-            IdleTrayApp.Instance?.SetLastPolledBrightness(current);
+            IdleTrayApp.Instance?.SetLastKnownBrightness(current);
 
             if (slider.Value != current)
                 slider.Value = current;
@@ -551,15 +674,28 @@ public class BrightnessForm : Form
         };
 
         brightnessPollTimer.Start();
+        */
 
-        // ⛔ Zamknij formę po kliknięciu poza nią
-        IdleTrayApp.MouseHook.Start((pt, btn) =>
+        // ⛔ Zamknij formę po kliknięciu poza nią + obsługa MouseUp
+        IdleTrayApp.MouseHook.Start((pt, btn, isDown) =>
         {
             if (!Bounds.Contains(pt))
             {
                 FadeOutThenClose();
             }
+
+            if (!isDown && btn == MouseButtons.Left && userInitiatedChange)
+            {
+                Log("🖱️ Global MouseUp – resetuję userInitiatedChange i zatrzymuję dragTimer");
+                _ = Task.Delay(500).ContinueWith(_ =>
+                {
+                    userInitiatedChange = false;
+                    //ScheduleBrightnessDropCheck();
+                }, TaskScheduler.FromCurrentSynchronizationContext());
+                dragTimer.Stop();
+            }
         });
+
         slider.TabStop = false;
         this.ActiveControl = null;
         var mon = MonitorFromWindow(this.Handle, 2);
@@ -576,8 +712,113 @@ public class BrightnessForm : Form
         this.Left = screen.Right - this.Width;
         this.Top = screen.Bottom - this.Height;
 
+        lastSentValue = slider.Value; // startowa wartość
+
 
     }
+    private async void FlashBatterySaverIcon(int blinkCount = 3, int delayMs = 200)
+    {
+        if (batterySaverIcon == null) return;
+
+        for (int i = 0; i < blinkCount; i++)
+        {
+            batterySaverIcon.Visible = false;
+            await Task.Delay(delayMs);
+            batterySaverIcon.Visible = true;
+            await Task.Delay(delayMs);
+        }
+    }
+
+    public async Task AnimateSliderTo(int targetValue, int stepDelay = 1)
+    {
+        int current = slider.Value;
+        Log("jade jade");
+        if (current == targetValue)
+            return;
+
+        int direction = targetValue > current ? 1 : -5;
+
+        while (slider.Value != targetValue)
+        {
+            int next = slider.Value + direction;
+
+            if (direction > 0)
+                slider.Value = Math.Min(next, targetValue);
+            else
+                slider.Value = Math.Max(next, targetValue);
+
+            // ręczny update labelki i ikonki (bo ValueChanged ignoruje przy !userInitiatedChange)
+            //valueLabel.Text = slider.Value.ToString();
+            //brightnessIcon.Image = GetBrightnessIcon(slider.Value);
+
+            await Task.Delay(stepDelay);
+        }
+    }
+
+    public async void PulseBatterySaverIcon(int pulseCount = 3, int delayMs = 30, float scaleUp = 1.2f, float scaleDown = 0.8f)
+    {
+        if (batterySaverIcon == null) return;
+
+        Size originalSize = batterySaverIcon.Size;
+        Point originalLocation = batterySaverIcon.Location;
+
+        for (int i = 0; i < pulseCount; i++)
+        {
+            batterySaverIcon.Visible = false;
+            await Task.Delay(100);
+            batterySaverIcon.Visible = true;
+
+            // Pomniejsz
+            ResizeBatteryIcon(scaleDown, originalSize, originalLocation);
+            await Task.Delay(delayMs);
+
+            // Powrót
+            batterySaverIcon.Size = originalSize;
+            batterySaverIcon.Location = originalLocation;
+            await Task.Delay(delayMs);
+
+
+
+            // Powiększ
+            ResizeBatteryIcon(scaleUp, originalSize, originalLocation);
+            await Task.Delay(delayMs);
+
+            // Powrót
+            batterySaverIcon.Size = originalSize;
+            batterySaverIcon.Location = originalLocation;
+            await Task.Delay(delayMs);
+
+        }
+    }
+
+    private void ResizeBatteryIcon(float scale, Size baseSize, Point baseLocation)
+    {
+        int newWidth = (int)(baseSize.Width * scale);
+        int newHeight = (int)(baseSize.Height * scale);
+        batterySaverIcon.Size = new Size(newWidth, newHeight);
+
+        batterySaverIcon.Location = new Point(
+            baseLocation.X - (newWidth - baseSize.Width) / 2,
+            baseLocation.Y - (newHeight - baseSize.Height) / 2
+        );
+    }
+
+
+
+    private void ScheduleBrightnessDropCheck()
+    {
+        int valueBefore = slider.Value;
+
+        _ = Task.Delay(1000).ContinueWith(_ =>
+        {
+            if (!userInitiatedChange && slider.Value < valueBefore)
+            {
+                Log("🔻 Jasność spadła po zmianie użytkownika – battery saver?");
+                PulseBatterySaverIcon();
+            }
+        }, TaskScheduler.FromCurrentSynchronizationContext());
+    }
+
 
     private void FadeOutThenClose()
     {
@@ -661,7 +902,26 @@ public class BrightnessForm : Form
     }
 
 
+    private Image GetBatterySaverIcon(string name)
+    {
+        var asm = typeof(BrightnessForm).Assembly;
+        var resourceName = "DimScreenSaver.Resources.BrightnessIcons." + name;
+        var stream = asm.GetManifestResourceStream(resourceName);
 
+        if (stream != null)
+        {
+            try
+            {
+                return Image.FromStream(stream);
+            }
+            finally
+            {
+                stream.Dispose();
+            }
+        }
+
+        return null;
+    }
     private Image GetBrightnessIcon(int brightness)
     {
         string name;
@@ -692,10 +952,20 @@ public class BrightnessForm : Form
         var stream = asm.GetManifestResourceStream(resourceName);
 
         if (stream != null)
-            return Image.FromStream(stream);
+        {
+            try
+            {
+                return Image.FromStream(stream);
+            }
+            finally
+            {
+                stream.Dispose();
+            }
+        }
 
         return null;
     }
+
 
 
     protected override CreateParams CreateParams

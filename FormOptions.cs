@@ -20,6 +20,7 @@ namespace DimScreenSaver
         private int lastForceLevel = -1;
         private int[] lastCustomMap = null;
         private bool isProgrammaticForceLevelUpdate = false;
+        public Label labelCurrentBrightness => lblCurrentBrightness;
 
 
         public FormOptions()
@@ -37,9 +38,9 @@ namespace DimScreenSaver
         {
             try
             {
-                // Jasność ekranu
-                int brightness = await IdleTrayApp.GetCurrentBrightnessAsync();
-                lblCurrentBrightness.Text = $"{brightness}%";
+                // Jasność ekranu zastąpione hookiem WMI
+                //int brightness = await IdleTrayApp.GetCurrentBrightnessAsync();
+                //lblCurrentBrightness.Text = $"{brightness}%";
             }
             catch
             {
@@ -111,7 +112,11 @@ namespace DimScreenSaver
 
 
             if (!IsInDesignMode())
+            {
                 await UpdateStatusLabels();
+                int brightness = await IdleTrayApp.GetCurrentBrightnessAsync();
+                lblCurrentBrightness.Text = $"{brightness}%";
+            }
 
 
 
@@ -135,11 +140,11 @@ namespace DimScreenSaver
 
             // Przekazanie do głównego programu i ustawienie podswietlenia zgodnie z mapą
             IdleTrayApp.Instance.brightnessToLevelMap = GetMappedRanges();
-            IdleTrayApp.Instance.SetKeyboardBacklightBasedOnBrightness(IdleTrayApp.Instance.lastKnownBrightness);
+            IdleTrayApp.Instance.SetKeyboardBacklightBasedOnBrightnessForce(IdleTrayApp.Instance.lastKnownBrightness);
 
             // Finalizacja
             Properties.Settings.Default.Save();
-            BalloonForm.ShowBalloon("Zapisano", "Ustawienia klawiatury zostały zapisane", 4000, BalloonForm.BalloonStyle.NO_ICONS);
+            BalloonForm.ShowBalloon("Zapisano", "Ustawienia klawiatury zostały zapisane", 4000, showIcons: false);
             this.Close();
         }
 
@@ -162,7 +167,7 @@ namespace DimScreenSaver
 
             // Przekazanie do głównego programu i ustawienie podswietlenia zgodnie z mapą
             IdleTrayApp.Instance.brightnessToLevelMap = GetMappedRanges();
-            IdleTrayApp.Instance.SetKeyboardBacklightBasedOnBrightness(IdleTrayApp.Instance.lastKnownBrightness);
+            IdleTrayApp.Instance.SetKeyboardBacklightBasedOnBrightnessForce(IdleTrayApp.Instance.lastKnownBrightness);
 
             // Finalizacja
             Properties.Settings.Default.Save();

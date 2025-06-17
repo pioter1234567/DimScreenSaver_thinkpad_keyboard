@@ -35,7 +35,8 @@ public class BalloonForm : Form
     [DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(IntPtr hWnd);
 
-    public BalloonForm(string title, string message, int durationMs = 5000, BalloonStyle style = BalloonStyle.WITH_ICONS)
+    public BalloonForm(string title, string message, int durationMs = 5000, BalloonStyle style = BalloonStyle.WITH_ICONS, string appName = "DimScreenSaver")
+
 
     {
         FormBorderStyle = FormBorderStyle.None;
@@ -52,7 +53,7 @@ public class BalloonForm : Form
 
         var appNameLabel = new Label()
         {
-            Text = "DimScreenSaver",
+            Text = appName,
             Font = new Font("Segoe UI", 9.5f, FontStyle.Regular),
             ForeColor = Color.FromArgb(20, 20, 20),
             Dock = DockStyle.Top,
@@ -191,6 +192,9 @@ public class BalloonForm : Form
 
     }
 
+
+
+
     public BalloonForm(int currentBrightness)
     {
         FormBorderStyle = FormBorderStyle.None;
@@ -245,7 +249,7 @@ public class BalloonForm : Form
             var app = IdleTrayApp.Instance;
             if (app != null)
             {
-                app.SetKeyboardBacklightBasedOnBrightness(slider.Value);
+                app.SetKeyboardBacklightBasedOnBrightnessForce(slider.Value);
                 app.lastKnownBrightness = slider.Value;
             }
         };
@@ -319,11 +323,16 @@ public class BalloonForm : Form
         }
     }
 
-    public static void ShowBalloon(string title, string message, int durationMs = 5000, BalloonStyle style = BalloonStyle.WITH_ICONS)
+    public static void ShowBalloon(string title, string message, int durationMs = 5000, bool showIcons = true, string appName = "DimScreenSaver")
+
+  
+
     {
+        
         Task.Run(() =>
         {
-            Application.Run(new BalloonForm(title, message, durationMs, style));
+            var style = showIcons ? BalloonStyle.WITH_ICONS : BalloonStyle.NO_ICONS;
+            Application.Run(new BalloonForm(title, message, durationMs, style, appName));
         });
 
     }

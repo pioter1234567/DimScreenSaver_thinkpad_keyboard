@@ -65,7 +65,7 @@ public class JavaDialogWatcher
         {
             if (!ShouldRun)
             {
-                LogJava("⛔ Monitoring wyłączony – pętla pominięta.");
+                Log("⛔ Monitoring wyłączony – pętla pominięta.");
                 return;
             }
             LastTickTime = DateTime.Now;
@@ -73,20 +73,20 @@ public class JavaDialogWatcher
 
             if (targetWindow != IntPtr.Zero)
             {
-                LogJava("🎯 Okno Java znalezione – uruchamiam monitorowanie.");
+                Log("🎯 Okno Java znalezione – uruchamiam monitorowanie.");
                 loopTimer.Stop();
 
                 StartMonitoringDisappearance(targetWindow);
             }
             else
             {
-                LogJava($"🔄 Brak okna Java – próbuję ponownie za {loopTimer.Interval / 1000} sekund...");
+                Log($"🔄 Brak okna Java – próbuję ponownie za {loopTimer.Interval / 1000} sekund...");
             }
         };
 
         loopTimer.Start();
         LastTickTime = DateTime.Now;
-        LogJava("🔍 Rozpoczęto cykliczne wyszukiwanie okna Java.");
+        Log("🔍 Rozpoczęto cykliczne wyszukiwanie okna Java.");
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -105,6 +105,7 @@ public class JavaDialogWatcher
 
 
     public JavaDialogWatcher() { logPath = Path.Combine(Path.GetTempPath(), "scrlog.txt"); }
+    private static void Log(string msg) => AppLogger.Log("JavaWatcher", msg);
 
     private void LogJava(string message)
     {
@@ -137,13 +138,13 @@ public class JavaDialogWatcher
     public void StartMonitoringDisappearance(IntPtr hwnd)
     {
 
-        LogJava("▶ StartMonitor – zaczynam obserwację okna.");
+        Log("▶ StartMonitor – zaczynam obserwację okna.");
         disappearanceWatcher = new System.Windows.Forms.Timer { Interval = 10_000 };
         disappearanceWatcher.Tick += (s, e) =>
         {
             if (Process.GetProcessesByName("javaw").Length == 0)
             {
-                LogJava("🟥 Proces javaw już nie istnieje – zatrzymuję obserwację.");
+                Log("🟥 Proces javaw już nie istnieje – zatrzymuję obserwację.");
                 disappearanceWatcher.Stop();
                 isErrorSoundPlaying = false;
                 errorSoundPlayer?.Stop();
@@ -155,7 +156,7 @@ public class JavaDialogWatcher
             }
             if (!IsWindow(hwnd))
             {
-                LogJava("🟥 Okno już nie istnieje (zamknięte) – przełączam z powrotem na tryb wyszukiwania.");
+                Log("🟥 Okno już nie istnieje (zamknięte) – przełączam z powrotem na tryb wyszukiwania.");
                 disappearanceWatcher.Stop();
                 targetWindow = IntPtr.Zero;
                 StartLoopingMonitor();
@@ -167,7 +168,7 @@ public class JavaDialogWatcher
 
             if (visibleNow && !wasPreviouslyVisible)
             {
-                LogJava("🟢 Okno Panelo wróciło – zgłaszam do systemu.");
+                Log("🟢 Okno Panelo wróciło – zgłaszam do systemu.");
                 OnJavaDialogVisible?.Invoke();
             }
 
@@ -177,13 +178,13 @@ public class JavaDialogWatcher
             {
                 if (!ShouldRun)
                 {
-                    LogJava("⛔ Monitoring wyłączony – ignoruję zniknięcie okna.");
+                    Log("⛔ Monitoring wyłączony – ignoruję zniknięcie okna.");
                     return;
                 }
 
                 if (IdleTrayApp.Instance != null && IdleTrayApp.Instance.monitorJavaDialog)
                 {
-                    LogJava("🕵️ Okno stało się niewidoczne – budzik aktywny, wybudzam i gram dźwięk!");
+                    Log("🕵️ Okno stało się niewidoczne – budzik aktywny, wybudzam i gram dźwięk!");
                     DisplayControl.TurnOn();
                     string pathToMp4 = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "alert.mp4");
 
@@ -197,30 +198,30 @@ public class JavaDialogWatcher
                                 if (IdleTrayApp.CurrentFormVideoPlayer == null || IdleTrayApp.CurrentFormVideoPlayer.IsDisposed)
                                 {
                                     IdleTrayApp.CurrentFormVideoPlayer = new FormVideoPlayer(pathToMp4);
-                                    LogJava("🆕 Tworzę nową instancję FormVideoPlayer");
+                                    Log("🆕 Tworzę nową instancję FormVideoPlayer");
                                 }
 
                                 if (!IdleTrayApp.CurrentFormVideoPlayer.Visible)
                                 {
                                     IdleTrayApp.CurrentFormVideoPlayer.Show();
-                                    LogJava("▶ Pokazuję FormVideoPlayer");
+                                    Log("▶ Pokazuję FormVideoPlayer");
                                 }
                             }
                             catch (Exception ex)
                             {
-                                LogJava($"❌ Błąd podczas pokazywania FormVideoPlayer: {ex.Message}");
+                                Log($"❌ Błąd podczas pokazywania FormVideoPlayer: {ex.Message}");
                             }
 
                         }, null);
                     }
                     else
                     {
-                        LogJava("Brak SynchronizationContext – nie udało się pokazać formularza video.");
+                        Log("Brak SynchronizationContext – nie udało się pokazać formularza video.");
                     }
                 }
                 else
                 {
-                    LogJava("🕵️ Okno zniknęło, ale budzik jest wyłączony – nie odtwarzam alertu.");
+                    Log("🕵️ Okno zniknęło, ale budzik jest wyłączony – nie odtwarzam alertu.");
                 }
             }
 
@@ -240,19 +241,19 @@ public class JavaDialogWatcher
                         errorSoundPlayer = new System.Media.SoundPlayer(wavPath);
                         errorSoundPlayer.PlayLooping();
                         isErrorSoundPlaying = true;
-                        LogJava("🔊 Rozpoczęto odtwarzanie dźwięku błędu.");
+                        Log("🔊 Rozpoczęto odtwarzanie dźwięku błędu.");
                         IdleTrayApp.ResetByPopup();
-                        BalloonForm.ShowBalloon("Błąd Panelo", "Zerwane połączenie", 20000, BalloonForm.BalloonStyle.NO_ICONS);
+                        BalloonForm.ShowBalloon("Błąd Panelo", "Zerwane połączenie", 20000, showIcons: false);
                     }
                     catch (Exception ex)
                     {
-                        LogJava($"❌ Błąd podczas odtwarzania dźwięku błędu: {ex.Message}");
+                        Log($"❌ Błąd podczas odtwarzania dźwięku błędu: {ex.Message}");
                     }
                 }
                 else if (errorBalloonCounter % 6 == 0)
                 {
-                    BalloonForm.ShowBalloon("Błąd Panelo", "Zerwane połączenie", 20000, BalloonForm.BalloonStyle.NO_ICONS);
-                    LogJava("🔁 Odświeżono bąbelek błędu Panelo.");
+                    BalloonForm.ShowBalloon("Błąd Panelo", "Zerwane połączenie", 20000, showIcons: false);
+                    Log("🔁 Odświeżono bąbelek błędu Panelo.");
                 }
             }
 
@@ -265,7 +266,7 @@ public class JavaDialogWatcher
                     errorSoundPlayer = null;
                     isErrorSoundPlaying = false;
                     errorBalloonCounter = 0;
-                    LogJava("🔇 Zatrzymano odtwarzanie dźwięku błędu.");
+                    Log("🔇 Zatrzymano odtwarzanie dźwięku błędu.");
                 }
                 catch { }
             }
@@ -291,11 +292,11 @@ public class JavaDialogWatcher
             errorSoundPlayer = null;
             isErrorSoundPlaying = false;
             errorBalloonCounter = 0;
-            LogJava("🔇 ForceStopPaneloAlarm() → zatrzymano dźwięk i wyzerowano licznik.");
+            Log("🔇 ForceStopPaneloAlarm() → zatrzymano dźwięk i wyzerowano licznik.");
         }
         catch (Exception ex)
         {
-            LogJava($"❌ Błąd przy ForceStopPaneloAlarm: {ex.Message}");
+            Log($"❌ Błąd przy ForceStopPaneloAlarm: {ex.Message}");
         }
     }
 
@@ -338,7 +339,7 @@ public class JavaDialogWatcher
 
             if (width >= 400 && width <= 500 && height >= 300 && height <= 400)
             {
-                LogJava($"🎯 Wykryłem okno Java → szerokość: {width}px, wysokość: {height}px");
+                Log($"🎯 Wykryłem okno Java → szerokość: {width}px, wysokość: {height}px");
                 return true;
             }
         }
