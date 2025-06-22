@@ -290,28 +290,42 @@ namespace DimScreenSaver
 
             this.FormClosed += async (s, e) =>
             {
-               
-
                 try
                 {
                     if (BatterySaverChecker.IsBatterySaverActive())
                     {
-                        await IdleTrayApp.Instance.RestoreBrightnessWithBatterySaverCompensation(previousBrightness);
-                        Log($"[FormClosed] Jasność przywrócona z uwzględnieniem battery saver: {previousBrightness}%");
+                        if (screenTurnedOff)
+                        {
+                            await IdleTrayApp.Instance.RestoreBrightnessWithBatterySaverCompensation(previousBrightness);
+                            Log($"[FormClosed] Jasność przywrócona (Battery Saver, ekran WYŁ.): {previousBrightness}%");
+                        }
+                        else
+                        {
+                            // TODO: Zamień w przyszłości na wersję z retry
+                            await IdleTrayApp.Instance.RestoreBrightnessWithBatterySaverCompensation(previousBrightness);
+                            Log($"[FormClosed] Jasność przywrócona (Battery Saver): {previousBrightness}%");
+                        }
                     }
                     else
                     {
-                        await IdleTrayApp.SetBrightnessAsync(previousBrightness);
-                        Log($"[FromClosed] Przywracam jasność (WMI): {previousBrightness}%");
+                        if (screenTurnedOff)
+                        {
+                            await IdleTrayApp.SetBrightnessAsync(previousBrightness);
+                            Log($"[FormClosed] Jasność przywrócona bez Battery Saver (ekran WYŁ.): {previousBrightness}%");
+                        }
+                        else
+                        {
+                            await IdleTrayApp.SetBrightnessWithRetry(previousBrightness);
+                            Log($"[FormClosed] Jasność przywrócona bez Battery Saver: {previousBrightness}%");
+                        }
                     }
-
                 }
                 catch (Exception ex)
                 {
                     try { Log($"[FormClosed] Błąd przywracania jasności: {ex.Message}"); } catch { }
                 }
-
-                if (screenTurnedOff)
+                
+                if (screenTurnedOff && !BatterySaverChecker.IsBatterySaverActive())
                 {
                     IdleTrayApp.WaitForUserActivity = true;
                     IdleTrayApp.idleCheckTimerPublic?.Stop();
@@ -323,7 +337,7 @@ namespace DimScreenSaver
                 {
                     try
                     {
-                        IdleTrayApp.Instance?.SetKeyboardBacklightBasedOnBrightnessForce(previousBrightness);
+                        IdleTrayApp.Instance?.SetKeyboardBacklightBasedOnBrightnessForce(previousBrightness, "DimForm.FormClosed");
                     }
                     catch (Exception ex)
                     {
@@ -331,9 +345,7 @@ namespace DimScreenSaver
                     }
                 }
 
-
-
-                // 🔐 Reset flag, zatrzymanie
+                // 🔐 Reset flag, zatrzymanie – PRZYWRÓCONE
                 IdleTrayApp.PreparingToDim = false;
                 IdleTrayApp.Instance.dimFormClosedAt = DateTime.Now;
                 OnGlobalReset = null;
@@ -341,8 +353,8 @@ namespace DimScreenSaver
                 dimFormMonitor?.Dispose();
                 StopScreenOffTimer("FormClosed");
                 Log("[FormClosed] FormClosed zakończony – form zamknięty");
-
             };
+
 
 
             OnGlobalReset = () =>

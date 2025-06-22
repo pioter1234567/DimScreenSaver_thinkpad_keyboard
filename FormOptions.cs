@@ -140,7 +140,7 @@ namespace DimScreenSaver
 
             // Przekazanie do głównego programu i ustawienie podswietlenia zgodnie z mapą
             IdleTrayApp.Instance.brightnessToLevelMap = GetMappedRanges();
-            IdleTrayApp.Instance.SetKeyboardBacklightBasedOnBrightnessForce(IdleTrayApp.Instance.lastKnownBrightness);
+            IdleTrayApp.Instance.SetKeyboardBacklightBasedOnBrightnessForce(IdleTrayApp.Instance.lastKnownBrightness,"FormOptions.BtnSave_Click");
 
             // Finalizacja
             Properties.Settings.Default.Save();
@@ -167,7 +167,7 @@ namespace DimScreenSaver
 
             // Przekazanie do głównego programu i ustawienie podswietlenia zgodnie z mapą
             IdleTrayApp.Instance.brightnessToLevelMap = GetMappedRanges();
-            IdleTrayApp.Instance.SetKeyboardBacklightBasedOnBrightnessForce(IdleTrayApp.Instance.lastKnownBrightness);
+            IdleTrayApp.Instance.SetKeyboardBacklightBasedOnBrightnessForce(IdleTrayApp.Instance.lastKnownBrightness,"FormOptions.ApplySettings()");
 
             // Finalizacja
             Properties.Settings.Default.Save();

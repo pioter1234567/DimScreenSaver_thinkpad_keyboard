@@ -22,7 +22,7 @@ namespace DimScreenSaver
     public class IdleTrayApp : ApplicationContext
     {
 
-              
+
         // 1. 🔄 Jasność / poziomy podświetlenia
         public int dimBrightnessPercent = 1;
         public int lastKnownBrightness = -1;
@@ -60,7 +60,7 @@ namespace DimScreenSaver
         private int screenOffAfterSecondsConfig = -1;
         private System.Threading.Timer javaWatchdogTimer;
         public static bool GlobalScreenOff = false;
-        
+
 
 
         // 3. 📺 Formy
@@ -80,7 +80,8 @@ namespace DimScreenSaver
         private static Queue<DateTime> recentTicks = new Queue<DateTime>();
         private static object tickLock = new object();
         private static bool isPopupResetInProgress = false;
-        
+        private DateTime? lastSafeStartIdleCheckTimerRun;
+
 
 
 
@@ -118,15 +119,15 @@ namespace DimScreenSaver
 
 
 
-      
 
 
 
-        
-  
 
 
-        
+
+
+
+
 
 
         //********************************//
@@ -194,11 +195,11 @@ namespace DimScreenSaver
 
 
 
-          
-           
 
 
-          StartWmiBrightnessHook();
+
+
+            StartWmiBrightnessHook();
 
             // 🎨 Ikony
             iconEnabled = LoadEmbeddedIcon("DimScreenSaver.dim.ico");
@@ -264,16 +265,23 @@ namespace DimScreenSaver
                 {
                     try
                     {
-                  
 
-                        if (isTemporarilyDisabled || dimFormActive || GlobalScreenOff)
+
+                        // 1) Sprawdzenie, czy SafeStart był w ciągu ostatnich 30s
+                        bool safeStartRecent = lastSafeStartIdleCheckTimerRun.HasValue
+                            && (DateTime.Now - lastSafeStartIdleCheckTimerRun.Value).TotalSeconds < 30;
+
+                        // 2) Zbieranie powodów pominięcia
+                        var powody = new List<string>();
+                        if (isTemporarilyDisabled) powody.Add("isTemporarilyDisabled=true");
+                        if (dimFormActive) powody.Add("dimFormActive=true");
+                        if (GlobalScreenOff) powody.Add("GlobalScreenOff=true");
+                        if (safeStartRecent) powody.Add("SafeStartIdleCheckTimer<30s");
+
+                        // 3) Pominięcie, jśli któryś powód występuje, pomijamy
+                        if (powody.Count > 0)
                         {
-                            var powody = new List<string>();
-                            if (isTemporarilyDisabled) powody.Add("isTemporarilyDisabled=true");
-                            if (dimFormActive) powody.Add("dimFormActive=true");
-                            if (GlobalScreenOff) powody.Add("GlobalScreenOff=true");
-
-                            Log("🐶 Watchdog Idle: Pomijam sprawdzanie ticka przez: " + string.Join(", ", powody));
+                            Log("🐶 Watchdog Idle: pomijam sprawdzanie ticka przez: " + string.Join(", ", powody));
                             return;
                         }
 
@@ -296,7 +304,7 @@ namespace DimScreenSaver
                         else
                         {
                             Log("🐶 Watchdog Idle: tick aktualny.");
-                        
+
                             // UpdateJavaWatcherState();
                         }
                     }
@@ -306,7 +314,7 @@ namespace DimScreenSaver
                     }
                 }, null, 0, 2 * 60 * 1000);
             }
-            
+
 
             // 🔁 Ponowne ustawienie ikonki po wszystkim
             UpdateTrayIcon();
@@ -345,10 +353,10 @@ namespace DimScreenSaver
             {
                 if (GlobalScreenOff || WaitForUserActivity)
                 {
-                    
-                    
+
+
                     ClearWakeState();
-                    
+
 
 
 
@@ -377,12 +385,12 @@ namespace DimScreenSaver
 
             MonitorStateWatcher.OnMonitorTurnedOff += () =>
             {
-                
 
-                if (dimFormActive)
+
+                if (dimFormActive && !BatterySaverChecker.IsBatterySaverActive())
                 {
                     Log("🧼 MonitorStateWatcher.OnMonitorTurnedOff - DimForm aktywny – zamykam go przez CloseFromScreenOff");
-                    
+
                     Application.OpenForms
                         .OfType<DimForm>()
                         .FirstOrDefault()
@@ -424,7 +432,7 @@ namespace DimScreenSaver
                 string dllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Keyboard_Core.dll");
                 keyboard = new KeyboardController(dllPath);
                 int brightness = await GetCurrentBrightnessAsync();
-                SetKeyboardBacklightBasedOnBrightnessForce(brightness);
+                SetKeyboardBacklightBasedOnBrightnessForce(brightness, "InitKeyboardAfterStartup()");
                 lastKnownBrightness = brightness;
             }
             catch (Exception ex)
@@ -640,9 +648,9 @@ namespace DimScreenSaver
 
 
 
-       
-          //**************************************//
-         // MENU, TRAY + STYLIZACJA I AKTUALIZACJA 
+
+        //**************************************//
+        // MENU, TRAY + STYLIZACJA I AKTUALIZACJA 
         //*************************************//
 
         private ContextMenuStrip BuildContextMenu()
@@ -801,7 +809,7 @@ namespace DimScreenSaver
                         LoadBrightnessMapFromSettings();
                         int brightness = await GetCurrentBrightnessAsync();
                         Log($"🎹 Auto-klawiatura włączona → ustawiam podświetlenie");
-                        SetKeyboardBacklightBasedOnBrightnessForce(brightness);
+                        SetKeyboardBacklightBasedOnBrightnessForce(brightness, "Zaznaczony keyboardAutoToggleItem.Checked");
 
                     }
                     catch (Exception ex)
@@ -1128,7 +1136,7 @@ namespace DimScreenSaver
                 idleCheckTimer.Start();
 
                 SaveConfig();
-                
+
             };
             timeoutMenu.DropDownItems.Add(item);
 
@@ -1161,7 +1169,7 @@ namespace DimScreenSaver
             };
 
             screenOffMenu.DropDownItems.Add(item);
-            
+
         }
 
 
@@ -1187,7 +1195,7 @@ namespace DimScreenSaver
 
             brightnessLevelMenu.DropDownItems.Add(item);
         }
-                        
+
 
         private void SetIconForTimeout(int seconds)
         {
@@ -1326,7 +1334,7 @@ namespace DimScreenSaver
             {
                 Log("⏰ Budzik cykliczny wyłączony");
                 return;
-                
+
             }
 
             Log($"⏰ Ustawiam budzik cykliczny co {wakeupIntervalMinutes} minut.");
@@ -1403,10 +1411,19 @@ namespace DimScreenSaver
 
         public static async Task<int> GetCurrentBrightnessAsync(int timeoutMs = 1000)
         {
+
+            if (GlobalScreenOff)
+            {
+                Log("🛑 GetCurrentBrightnessAsync: ekran fizycznie wyłączony – pomijam odczyt");
+                return -2; // wartość oznaczająca: „nie próbuj fallbacku, to nie błąd, tylko ekran off”
+            }
+
+
+
             Stopwatch sw = null;
             try
             {
-                Log($"🕵️ Start GetCurrentBrightnessAsync (ustawiony timeout {timeoutMs} ms)");
+                Log($"🔆 Start GetCurrentBrightnessAsync (ustawiony timeout {timeoutMs} ms)");
 
                 sw = Stopwatch.StartNew();
                 var brightnessTask = Task.Run(() =>
@@ -1441,28 +1458,47 @@ namespace DimScreenSaver
                     else
                     {
                         Log($"⚠️ Jasność z taska = {result}% → fallback dim{dimFormIsOpen}");
-                        return await LoadBrightnessFallback(sw.ElapsedMilliseconds);
+                        int fallbackValue = await LoadBrightnessFallback();
+                        if (fallbackValue == -3)
+                        {
+                            Log("❌ LoadBrightnessFallback zwrócił -3 – przerywam dalsze próby");
+                            return -3;
+                        }
+                        return fallbackValue;
                     }
                 }
                 else
                 {
                     sw.Stop();
                     Log($"⏱ Ustawiony timeout ({timeoutMs}) ms (rzeczywiste: {sw.ElapsedMilliseconds}) – fallback");
-                    return await LoadBrightnessFallback(sw.ElapsedMilliseconds);
+                    int fallbackValue = await LoadBrightnessFallback();
+                    if (fallbackValue == -3)
+                    {
+                        Log("❌ LoadBrightnessFallback zwrócił -3 – przerywam dalsze próby");
+                        return -3;
+                    }
+                    return fallbackValue;
                 }
             }
             catch (Exception ex)
             {
                 sw?.Stop();
                 Log($"❌ Błąd GetCurrentBrightnessAsync: {ex.Message}, {sw?.ElapsedMilliseconds ?? -1} ms");
-                return await LoadBrightnessFallback(sw?.ElapsedMilliseconds ?? -1); // <-- TEŻ MUSI BYĆ await
+                int fallbackValue = await LoadBrightnessFallback();
+                if (fallbackValue == -3)
+                {
+                    Log("❌ LoadBrightnessFallback zwrócił -3 – przerywam dalsze próby");
+                    return -3;
+                }
+                return fallbackValue;
             }
         }
 
 
         public async Task RestoreBrightnessWithBatterySaverCompensation(int desiredBrightness)
         {
-
+            // ⏳ Odczekujemy chwilę, żeby sie ustabilizowalo (np wybudzenie)
+            await Task.Delay(500);
             if (!BatterySaverChecker.IsBatterySaverActive())
             {
                 Log($"🔋 Battery saver NIEaktywny – ustawiam jasność {desiredBrightness}% bez korekty");
@@ -1475,7 +1511,7 @@ namespace DimScreenSaver
             Log($"🔋 Battery saver aktywny – ustawiam {compensated}% (kompensacja 30%)");
             int compensatedb4 = compensated;
             await SetBrightnessAsync(compensated);
-            BalloonForm.ShowBalloon("Kompensuję jasność...", $"Oczekiwana:\u00A0{desiredBrightness}%,\u00A0ustawiam:\u00A0{compensated}%",4000, showIcons: false, "Sys. Oszczędzanie baterii wł. - kompensacja 🔆");
+            BalloonForm.ShowBalloon("Kompensuję jasność...", $"Oczekiwana:\u00A0{desiredBrightness}%,\u00A0ustawiam:\u00A0{compensated}%", 4000, showIcons: false, "Sys. Oszczędzanie baterii wł. - kompensacja 🔆");
             await Task.Delay(3000);
 
             int current = await GetCurrentBrightnessAsync(500);
@@ -1491,13 +1527,13 @@ namespace DimScreenSaver
                 Log($"⚠️ Windows NIE obniżył jasności – ustawiam ręcznie {desiredBrightness}%");
                 Log($"📉 Współczynnik spadku jasności (runtime): {actualDrop:F2}");
                 BalloonForm.ShowBalloon("Windows nie obniżył jasności", $"Przywracam\u00A0oczekiwane:\u00A0{desiredBrightness}%", 12000, showIcons: false, "Sys. Oszczędzanie baterii wł. - kompensacja 🔆");
-               
-            
-            await SetBrightnessAsync(desiredBrightness);
+
+
+                await SetBrightnessAsync(desiredBrightness);
             }
             else
             {
-               
+
                 Log($"📉 Współczynnik spadku jasności (runtime): {actualDrop:F2}");
                 Log($"❓ Jasność po kompensacji to {current}%, oczekiwano {desiredBrightness}% – nic nie robię");
                 BalloonForm.ShowBalloon("Kompensacja nieudana - błąd współczynnika", $"Jasność:\u00A0{current}%,\u00A0oczekiwano\u00A0{desiredBrightness}%\u00A0–\u00A0ignoruję", 5000, showIcons: true, "Sys. Oszczędzanie baterii wł. - kompensacja 🔆");
@@ -1534,16 +1570,37 @@ namespace DimScreenSaver
             }
         }
 
-
-        private static async Task<int> LoadBrightnessFallback(long elapsedMs)
+        private static int fallbackRetryCount = 0;
+        private const int MAX_FALLBACK_RETRIES = 6;
+        public static void ResetFallbackRetryCount()
         {
+            fallbackRetryCount = 0;
+        }
+        private static async Task<int> LoadBrightnessFallback()
+        {
+
+            if (fallbackRetryCount == 2)
+            {
+
+                await NudgeBrightness();
+
+            }
+            if (fallbackRetryCount >= MAX_FALLBACK_RETRIES)
+            {
+                Log("🚩 Limit prób fallback osiągnięty – przerywam dalsze próby");
+                return -3;
+
+            }
+
+            fallbackRetryCount++;
+
             // 1. lastKnownBrightness
             int last = Instance?.lastKnownBrightness ?? -1;
             if (last >= 0 && last != Instance?.dimBrightnessPercent)
             {
-                Log($"📥 Fallback: używam lastKnownBrightness = {last}% i ustawiam jasność");
-                await TrySetBrightness(last);
-
+                Log($"📥 Fallback: używam lastKnownBrightness = {last}% i ustawiam jasność (próba {fallbackRetryCount}/{MAX_FALLBACK_RETRIES})");
+                await SetBrightnessWithRetry(last);
+                //await Task.Delay(1000);
                 return last;
             }
 
@@ -1554,8 +1611,9 @@ namespace DimScreenSaver
                 {
                     if (fromFile != Instance?.dimBrightnessPercent)
                     {
-                        Log($"📁 Fallback: używam z pliku brightness.txt: {fromFile}%");
-                        await TrySetBrightness(fromFile);
+                        Log($"📁 Fallback: używam z pliku brightness.txt: {fromFile}% (próba {fallbackRetryCount}/{MAX_FALLBACK_RETRIES})");
+                        await SetBrightnessWithRetry(fromFile);
+                        //await Task.Delay(1000);
                         return fromFile;
                     }
                     else
@@ -1570,11 +1628,13 @@ namespace DimScreenSaver
             }
 
             // 3. domyślnie
-            Log("🕳️ Fallback: brak danych – ustawiam domyślne 70%");
-            await TrySetBrightness(70);
-           
+            Log($"🕳️ Fallback: brak danych – ustawiam domyślne 70% (próba {fallbackRetryCount}/{MAX_FALLBACK_RETRIES})");
+            //await Task.Delay(1000);
+            await SetBrightnessWithRetry(70);
+
             return 70;
         }
+
 
 
 
@@ -1593,6 +1653,7 @@ namespace DimScreenSaver
                         {
                             instance.InvokeMethod("WmiSetBrightness", new object[] { 1, brightness });
                         }
+
                     }
                 }
                 catch (Exception ex)
@@ -1600,6 +1661,62 @@ namespace DimScreenSaver
                     IdleTrayApp.Log($"[WMI] Błąd ustawiania jasności: {ex.Message}");
                 }
             }));
+
+        }
+
+
+
+
+        public static async Task<bool> SetBrightnessWithRetry(int targetBrightness, int maxRetries = 3, int delayBetweenAttemptsMs = 700)
+        {
+
+            if (targetBrightness < 0)
+            {
+                Log($"⛔ SetBrightnessWithRetry: Nie ustawiam jasności – wartość {targetBrightness}% jest nieprawidłowa.");
+                return false;
+            }
+
+            for (int attempt = 1; attempt <= maxRetries; attempt++)
+            {
+                await SetBrightnessAsync(targetBrightness);
+                try
+                {
+                    Instance?.SetKeyboardBacklightBasedOnBrightnessForce(targetBrightness, "SetBrightnessWithRetry()");
+
+                }
+                catch (Exception ex)
+                {
+                    Log($"[FormClosed] Błąd przywracania klawiatury: {ex.Message}");
+                }
+
+                await Task.Delay(delayBetweenAttemptsMs);
+
+                int current = await GetCurrentBrightnessAsync(1000);
+
+                if (current == targetBrightness)
+                {
+                    Log($"✅ Jasność ustawiona prawidłowo ({current}%) przy próbie {attempt}/{maxRetries}");
+
+                    return true;
+                }
+
+                Log($"⚠️ Próba {attempt}: Jasność = {current}%, oczekiwano {targetBrightness}%");
+            }
+
+            Log($"❌ Nie udało się ustawić jasności {targetBrightness}% po {maxRetries} próbach.");
+            return false;
+        }
+
+
+        private static async Task NudgeBrightness()
+        {
+
+            Log("NudgeBrightness begin");
+            await SetBrightnessAsync(2);
+            Log("NudgeBrightness 2");
+            await SetBrightnessAsync(3);
+            Log("NudgeBrightness 3");
+
         }
 
 
@@ -1625,15 +1742,15 @@ namespace DimScreenSaver
 
         // Sterowanie podswietleniem klawiatury wykorzystywane przez funkcje automatyczne
         // takie jak wygaszenie ekranu lub zmiana jasnosci ekranu. (Force change)
-        public void SetKeyboardBacklightBasedOnBrightnessForce(int brightness)
+        public void SetKeyboardBacklightBasedOnBrightnessForce(int brightness, string source)
         {
             if (!keyboardAutoEnabled || keyboard == null)
                 return;
 
             int level = GetBacklightLevelForBrightness(brightness);
-            
+
             keyboard.Set(level);
-            Log($"🎹 SetKeyboard..Force(): Jasność {brightness}% → Poziom {level}");
+            Log($"🎹 SetKeyboard..Force(): Jasność {brightness}% → Poziom {level} (source: {source})");
         }
 
         // Sterowanie podswietleniem klawiatury wykorzystywane tylko w ticku
@@ -1694,6 +1811,7 @@ namespace DimScreenSaver
                 try
                 {
                     Log("Startuje Timer z SafeStartIdleCheckTimer()");
+                    lastSafeStartIdleCheckTimerRun = DateTime.Now;
                     idleCheckTimer.Start();
                 }
                 catch (ObjectDisposedException)
@@ -1726,7 +1844,7 @@ namespace DimScreenSaver
             }
             if (isTickRunning)
             {
-                Log("Tick is running. wychodze.");
+                Log("Tick is running. Wychodze.");
                 return;
             }
             isTickRunning = true;
@@ -1734,82 +1852,40 @@ namespace DimScreenSaver
             try
             {
                 if (WaitForUserActivity)
-            {
-                int idleNow = GetIdleTime() / 1000;
-                bool audioActive = wakeOnAudio && AudioWatcher.IsAudioPlaying();
+                {
+                    int idleNow = GetIdleTime() / 1000;
+                    bool audioActive = wakeOnAudio && AudioWatcher.IsAudioPlaying();
 
                     Log($"[MAIN TICK] AudioActive = {audioActive} (wakeOnAudio = {wakeOnAudio})");
 
-                if (idleNow == 0 || idleNow < lastIdleTime || audioActive)
-                {
+                    if (idleNow == 0 || idleNow < lastIdleTime || audioActive)
+                    {
                         Log($"[MAIN TICK] Kończę Oczekiwanie na aktywność – idleNow={idleNow}, lastIdleTime={lastIdleTime}");
-                    WaitForUserActivity = false;
-                    GlobalScreenOff = false;
-                    idleCheckTimerPublic?.Start();
-                    UpdateTrayIcon();
-                    lastIdleTime = -1;
+                        WaitForUserActivity = false;
+                        GlobalScreenOff = false;
+                        idleCheckTimerPublic?.Start();
+                        UpdateTrayIcon();
+                        lastIdleTime = -1;
+                        return;
+                    }
+
+                    lastIdleTime = idleNow;
+                    Log($"[MAIN TICK] Oczekiwanie na aktywność... idle: {idleNow}s");
                     return;
                 }
 
-                lastIdleTime = idleNow;
-                    Log($"[MAIN TICK] Oczekiwanie na aktywność... idle: {idleNow}s");
-                return;
-            }
-
-            if (GlobalScreenOff)
-            {
+                if (GlobalScreenOff)
+                {
                     Log("[MAIN TICK] ⛔ Tick pominięty – ekran wyłączony (GlobalScreenOff)");
-                return;
-            }
-
-            lastIdleTickTime = DateTime.Now;
-
-                /*   //ZASTĄPIONE HOOKIEM WMI
-                if (!isBrightnessCheckRunning)
-                {
-                    isBrightnessCheckRunning = true;
-
-                    _ = Task.Run((Func<Task>)(async () =>
-                    {
-                        try
-                        {
-                            int tickId = Interlocked.Increment(ref _tickCounter);
-                            IdleTrayApp.Log($"🔎 [tick {tickId}] DEBUG PRZED GetCurrentBrightnessAsync ");
-                            int brightness = await GetCurrentBrightnessAsync();
-                            IdleTrayApp.Log($"🔎 [tick {tickId}] DEBUG PO GetCurrentBrightnessAsync");
-
-                            if (brightness >= 0 && brightness <= 100)
-                            {
-                                lastPolledBrightness = brightness;
-
-                                UISyncContext?.Post(_ =>
-                                {
-                                    SetKeyboardBacklightBasedOnBrightnessTick(brightness);
-                                    lastKnownBrightness = brightness;
-                                }, null);
-                            }
-                            else
-                            {
-                                IdleTrayApp.Log($"[MAIN TICK] ❌ Jasność poza zakresem: {brightness}");
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            IdleTrayApp.Log($"[MAIN TICK] ⚠️ Błąd podczas pobierania jasności: {ex.Message}");
-                        }
-                        finally
-                        {
-                            isBrightnessCheckRunning = false;
-                        }
-                    }));
+                    return;
                 }
-                else
-                {
-                    Log("⚠️ Pomiar jasności nadal trwa – pomijam kolejny GetCurrentBrightnessAsync.");
-                } */ 
+
+                lastIdleTickTime = DateTime.Now;
+
+              
 
                 int idle = GetIdleTime() / 1000;
-            bool audioActiveNow = wakeOnAudio && AudioWatcher.IsAudioPlaying();
+                bool audioActiveNow = wakeOnAudio && AudioWatcher.IsAudioPlaying();
 
                 if (wakeOnAudio && audioActiveNow)
                 {
@@ -1820,47 +1896,55 @@ namespace DimScreenSaver
                     Log($"⏱️ [MAIN TICK] IDLE: prog: {idleSeconds}s, sys: {idle}s, THRESHOLD: dim:{idleThresholdRuntime}s off:{screenOffAfterSecondsRuntime}s");
                 }
 
-                if (idle == 0 || audioActiveNow)
-            {
-                ResetIdle();
-                idleSeconds = 0;
-                GlobalScreenOff = false;
-                WaitForUserActivity = false;
-            }
-            else
-            {
-                idleSeconds = idle;
-            }
+                var reasons = new List<string>();
+                if (idle == 0 || idle < idleSeconds)
+                    reasons.Add("aktywność użytkownika");
+                if (audioActiveNow)
+                    reasons.Add("audioActiveNow");
 
-            if (idleSeconds >= idleThresholdRuntime)
-            {
-                idleCheckTimer.Stop();
-
-                if (!GlobalScreenOff)
+                if (reasons.Count > 0)
                 {
-                    trayIcon.Text = "[MAIN TICK] Uruchamiam przygaszanie...";
-                    ShowDimForm();
+                    // scalamy powody w jeden string
+                    var source = string.Join(", ", reasons);
+                    ResetIdle(source);
+                    idleSeconds = 0;
+                    GlobalScreenOff = false;
+                    WaitForUserActivity = false;
                 }
                 else
                 {
-                    trayIcon.Text = "[MAIN TICK] Przygaszanie pominięte";
+                    idleSeconds = idle;
                 }
-            }
 
-            if (!disableItem.Checked &&
-                screenOffAfterSecondsRuntime > 0 &&
-                idleSeconds >= screenOffAfterSecondsRuntime &&
-                !dimFormActive &&
-                !GlobalScreenOff)
-            {
+                if (idleSeconds >= idleThresholdRuntime)
+                {
+                    idleCheckTimer.Stop();
+
+                    if (!GlobalScreenOff)
+                    {
+                        trayIcon.Text = "[MAIN TICK] Uruchamiam przygaszanie...";
+                        ShowDimForm();
+                    }
+                    else
+                    {
+                        trayIcon.Text = "[MAIN TICK] Przygaszanie pominięte";
+                    }
+                }
+
+                if (!disableItem.Checked &&
+                    screenOffAfterSecondsRuntime > 0 &&
+                    idleSeconds >= screenOffAfterSecondsRuntime &&
+                    !dimFormActive &&
+                    !GlobalScreenOff)
+                {
                     Log($"[MAIN TICK] 🌒 Ekran OFF przez IdleTrayApp | idle: {idleSeconds}");
 
-                DisplayControl.TurnOff();
-                ResetIdle();
-                GlobalScreenOff = true;
-                WaitForUserActivity = true;
-                idleCheckTimer.Stop();
-            }
+                    DisplayControl.TurnOff();
+                    ResetIdle("Wyłączanie ekranu");
+                    GlobalScreenOff = true;
+                    WaitForUserActivity = true;
+                    idleCheckTimer.Stop();
+                }
             }
             finally
             {
@@ -1875,7 +1959,7 @@ namespace DimScreenSaver
             {
                 Log("❌ [ShowDimForm] Forma już otwarta – pomijam");
 
-                
+
                 return;
             }
 
@@ -1884,7 +1968,7 @@ namespace DimScreenSaver
 
 
             Log("🟢 [ShowDimForm] START → przygotowuję przygaszenie");
-            
+
 
             int freshIdle = GetIdleTime() / 1000;
             if (freshIdle < idleThresholdRuntime)
@@ -1901,7 +1985,7 @@ namespace DimScreenSaver
 
             try
             {
-               
+
                 int currentBrightness = await GetCurrentBrightnessAsync();
                 lastKnownBrightness = currentBrightness;
 
@@ -1971,7 +2055,7 @@ namespace DimScreenSaver
                 Log("🔙 DimForm.ShowDialog() → form zamknięta, wracam");
                 UpdateTrayIcon();
 
-               
+
             }
             catch (ObjectDisposedException)
             {
@@ -2011,27 +2095,52 @@ namespace DimScreenSaver
         }
 
 
-        public static void ClearWakeState()
+        public static async Task ClearWakeState()
         {
-            
             idleSeconds = 0;
             lastIdleTime = -1;
             GlobalScreenOff = false;
             WaitForUserActivity = false;
-            ResetIdle();
-            Instance?.SafeStartIdleCheckTimer();
+            ResetIdle("ClearWakeState()");
 
+            if (Instance != null)
+                Instance.SafeStartIdleCheckTimer();
+
+            int brightnessFromFile = -1;
 
             try
             {
-                Instance?.SetKeyboardBacklightBasedOnBrightnessForce(Instance?.lastKnownBrightness ?? 0);
+                if (File.Exists(BrightnessPath) && int.TryParse(File.ReadAllText(BrightnessPath), out int parsed))
+                {
+                    brightnessFromFile = parsed;
+                    Log($"📄 brightness.txt → odczytano: {parsed}%");
+                }
+                else
+                {
+                    Log("⚠️ Nie udało się odczytać brightness.txt – używam domyślnego 70%");
+                    brightnessFromFile = 70;
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"📄 Błąd odczytu brightness.txt: {ex.Message}");
+                brightnessFromFile = 70;
+            }
 
+            // 🔁 Próbuj ustawić z retry
+            bool success = await SetBrightnessWithRetry(brightnessFromFile);
+
+            // 🎹 Przywróć podświetlenie
+            try
+            {
+                Instance?.SetKeyboardBacklightBasedOnBrightnessForce(brightnessFromFile, "ClearWakeState()");
             }
             catch (Exception ex)
             {
                 Log($"🎹 Błąd przywracania klawiatury: {ex.Message}");
             }
         }
+
 
 
         private int GetIdleTime()
@@ -2043,23 +2152,25 @@ namespace DimScreenSaver
         }
 
 
-        public static void ResetIdle()
+        public static void ResetIdle(string source)
         {
             if (GlobalScreenOff && !isPopupResetInProgress)
             {
-                Log("🛑 Pomijam ResetIdle → ekran i tak się wyłączy zaraz (GlobalScreenOff = true)");
+                Log($"ResetIdle: {source} 🛑 Pomijam → ekran zaraz się wyłączy (GlobalScreenOff = true)");
                 return;
             }
-
+            fallbackRetryCount = 0;
             mouse_event(MOUSEEVENTF_MOVE, 0, 0, 0, UIntPtr.Zero);
-            Log("ResetIdle() → zasymulowano MOUSEEVENTF_MOVE (Δx=0, Δy=0)");
+            Log($"ResetIdle: {source}");
             DimForm.OnGlobalReset?.Invoke();
         }
+
 
 
         public static void ResetByPopup()
         {
             Log("Reset przez popup");
+            fallbackRetryCount = 0;
             isPopupResetInProgress = true;
             try
             {
@@ -2077,7 +2188,7 @@ namespace DimScreenSaver
             GlobalScreenOff = false;
             WaitForUserActivity = false;
 
-            
+
         }
 
 
@@ -2241,8 +2352,8 @@ namespace DimScreenSaver
 
 
 
-          //**********************************//
-         // INTERTOP, STRUCTS, DLLIMPORTY
+        //**********************************//
+        // INTERTOP, STRUCTS, DLLIMPORTY
         //**********************************//
 
 
@@ -2339,8 +2450,8 @@ namespace DimScreenSaver
             if (nCode >= 0)
             {
                 int vkCode = Marshal.ReadInt32(lParam);
-                
-              
+
+
 
                 // Obsługa zamykania DimForm
                 if (wParam == (IntPtr)WM_KEYDOWN && dimFormActive)
@@ -2370,7 +2481,7 @@ namespace DimScreenSaver
 
         private ManagementEventWatcher wmiWatcher;
         private int referenceBrightness = -1;
-     
+
 
 
         private void StartWmiBrightnessHook()

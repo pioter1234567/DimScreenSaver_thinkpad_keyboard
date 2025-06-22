@@ -10,7 +10,7 @@ namespace DimScreenSaver
         private static readonly object logLock = new object();
         private static int logCounter = 0;
         private const int TrimFrequency = 10; // Przycinaj częściej, żeby lepiej kontrolować długość
-        private const int MaxLines = 5000;
+        private const int MaxLines = 3000;
         private static readonly string logPath = Path.Combine(Path.GetTempPath(), "scrlog.txt");
 
         public static void Log(string prefix, string message)
@@ -51,7 +51,10 @@ namespace DimScreenSaver
                 if (lines.Length > MaxLines)
                 {
                     string[] trimmed = lines.Skip(lines.Length - MaxLines).ToArray();
-                    File.WriteAllLines(logPath, trimmed);
+                    using (var fs = new FileStream(logPath, FileMode.Create, FileAccess.Write, FileShare.Read))
+                    using (var sw = new StreamWriter(fs))
+                        foreach (var line in trimmed)
+                            sw.WriteLine(line);
                 }
             }
             catch (Exception ex)

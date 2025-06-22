@@ -249,7 +249,7 @@ public class BalloonForm : Form
             var app = IdleTrayApp.Instance;
             if (app != null)
             {
-                app.SetKeyboardBacklightBasedOnBrightnessForce(slider.Value);
+                app.SetKeyboardBacklightBasedOnBrightnessForce(slider.Value, "BrightnessForm.slider.ValueChanged += async (s, e) =>");
                 app.lastKnownBrightness = slider.Value;
             }
         };

@@ -203,7 +203,7 @@ public class BrightnessForm : Form
                     var app = IdleTrayApp.Instance;
                     if (app != null)
                     {
-                        app.SetKeyboardBacklightBasedOnBrightnessForce(value);
+                        app.SetKeyboardBacklightBasedOnBrightnessForce(value, "BrightnessForm.slider.MouseUp += async (s, e) =>");
                         app.lastKnownBrightness = value;
                         app.SetLastKnownBrightness(value);
                     }
@@ -241,7 +241,7 @@ public class BrightnessForm : Form
                 var app = IdleTrayApp.Instance;
                 if (app != null)
                 {
-                    app.SetKeyboardBacklightBasedOnBrightnessForce(current);
+                    app.SetKeyboardBacklightBasedOnBrightnessForce(current, "BrightnessForm.dragTimer.Tick += async (s, e) =>");
                     app.lastKnownBrightness = current;
                 }
 
@@ -269,7 +269,7 @@ public class BrightnessForm : Form
                 var app = IdleTrayApp.Instance;
                 if (app != null)
                 {
-                    app.SetKeyboardBacklightBasedOnBrightnessForce(value);
+                    app.SetKeyboardBacklightBasedOnBrightnessForce(value, "BrightnessForm.scrollTimer.Tick += async (s, e) =>");
                     app.lastKnownBrightness = value;
                 }
             

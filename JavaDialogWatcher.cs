@@ -61,32 +61,39 @@ public class JavaDialogWatcher
         }
 
         loopTimer = new System.Windows.Forms.Timer { Interval = 30_000 };
-        loopTimer.Tick += (s, e) =>
-        {
-            if (!ShouldRun)
-            {
-                Log("⛔ Monitoring wyłączony – pętla pominięta.");
-                return;
-            }
-            LastTickTime = DateTime.Now;
-            FindJavaDialog(); // próba znalezienia
-
-            if (targetWindow != IntPtr.Zero)
-            {
-                Log("🎯 Okno Java znalezione – uruchamiam monitorowanie.");
-                loopTimer.Stop();
-
-                StartMonitoringDisappearance(targetWindow);
-            }
-            else
-            {
-                Log($"🔄 Brak okna Java – próbuję ponownie za {loopTimer.Interval / 1000} sekund...");
-            }
-        };
+        // 1) przypisujemy handler do zdarzenia
+        loopTimer.Tick += LoopingMonitor_Tick;
 
         loopTimer.Start();
         LastTickTime = DateTime.Now;
         Log("🔍 Rozpoczęto cykliczne wyszukiwanie okna Java.");
+
+        // 2) i od razu po uruchomieniu robimy pierwsze sprawdzenie
+        LoopingMonitor_Tick(this, EventArgs.Empty);
+    }
+
+    // Wydzielona metoda z całą logiką Tick-a
+    private void LoopingMonitor_Tick(object sender, EventArgs e)
+    {
+        if (!ShouldRun)
+        {
+            Log("⛔ Monitoring wyłączony – pętla pominięta.");
+            return;
+        }
+
+        LastTickTime = DateTime.Now;
+        FindJavaDialog(); // próba znalezienia
+
+        if (targetWindow != IntPtr.Zero)
+        {
+            Log("🎯 Okno Java znalezione – uruchamiam monitorowanie.");
+            loopTimer.Stop();
+            StartMonitoringDisappearance(targetWindow);
+        }
+        else
+        {
+            Log($"🔄 Brak okna Java – próbuję ponownie za {loopTimer.Interval / 1000} sekund...");
+        }
     }
 
     [StructLayout(LayoutKind.Sequential)]
