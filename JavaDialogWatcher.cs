@@ -146,7 +146,7 @@ public class JavaDialogWatcher
     {
 
         Log("▶ StartMonitor – zaczynam obserwację okna.");
-        disappearanceWatcher = new System.Windows.Forms.Timer { Interval = 10_000 };
+        disappearanceWatcher = new System.Windows.Forms.Timer { Interval = 5_000 };
         disappearanceWatcher.Tick += (s, e) =>
         {
             if (Process.GetProcessesByName("javaw").Length == 0)
@@ -158,6 +158,7 @@ public class JavaDialogWatcher
                 errorSoundPlayer = null;
                 errorBalloonCounter = 0;
                 targetWindow = IntPtr.Zero;
+                IdleTrayApp.javaFollowUpActive = false;
                 StartLoopingMonitor();
                 return;
             }
@@ -166,11 +167,12 @@ public class JavaDialogWatcher
                 Log("🟥 Okno już nie istnieje (zamknięte) – przełączam z powrotem na tryb wyszukiwania.");
                 disappearanceWatcher.Stop();
                 targetWindow = IntPtr.Zero;
+                IdleTrayApp.javaFollowUpActive = false;
                 StartLoopingMonitor();
                 return;
             }
             LastTickTime = DateTime.Now;
-            bool visibleNow = IsWindowVisible(hwnd); // ← TU!
+            bool visibleNow = IsWindowVisible(hwnd);
 
 
             if (visibleNow && !wasPreviouslyVisible)
@@ -346,12 +348,23 @@ public class JavaDialogWatcher
 
             if (width >= 400 && width <= 500 && height >= 300 && height <= 400)
             {
-                Log($"🎯 Wykryłem okno Java → szerokość: {width}px, wysokość: {height}px");
+                Log($"🎯 Wykryłem okno Java → szerokość: {width}px, wysokość: {height}px; Visible = {IsWindowVisible(hWnd)}");
+
+                // 🔁 Nowy dodatek:
+                if (IsWindowVisible(hWnd))
+                {
+                    Log("👁️ Okno jest widoczne – wywołuję OnJavaDialogVisible()");
+                    OnJavaDialogVisible?.Invoke();
+                }
+
                 return true;
             }
         }
         return false;
     }
+
+
+
 
 
     public void FindJavaDialog()

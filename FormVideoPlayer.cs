@@ -110,7 +110,7 @@ public class FormVideoPlayer : Form
         {
 
 
-            await Task.Delay(20_000);
+            await Task.Delay(30_000);
 
             if (alreadyClosing || this.IsDisposed || inner == null || inner.IsDisposed)
             {

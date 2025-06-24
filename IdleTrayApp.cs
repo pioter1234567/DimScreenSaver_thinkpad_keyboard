@@ -11,6 +11,7 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using Newtonsoft.Json;
 
 
 
@@ -60,6 +61,7 @@ namespace DimScreenSaver
         private int screenOffAfterSecondsConfig = -1;
         private System.Threading.Timer javaWatchdogTimer;
         public static bool GlobalScreenOff = false;
+        public static bool javaFollowUpActive = false;
 
 
 
@@ -81,6 +83,7 @@ namespace DimScreenSaver
         private static object tickLock = new object();
         private static bool isPopupResetInProgress = false;
         private DateTime? lastSafeStartIdleCheckTimerRun;
+
 
 
 
@@ -112,7 +115,8 @@ namespace DimScreenSaver
         // 7. 🛠️ Pozostałe / narzędziowe
         private Control guiInvoker = new Control();
         private static readonly string configPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "DimScreenSaver", "settings.cfg");
-        private static readonly string BrightnessPath = Path.Combine(Path.GetTempPath(), "brightness.txt");
+        private static readonly string StateFilePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "DimScreenSaver", "state.json");
+        private static readonly string BrightnessPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "DimScreenSaver", "brightness.txt");
 
         public static IdleTrayApp Instance { get; private set; }
         private static void Log(string msg) => AppLogger.Log("IdleTray", msg);
@@ -297,9 +301,7 @@ namespace DimScreenSaver
                         {
                             System.Threading.Thread.Sleep(100);
                             Log("💣 Watchdog Idle: brak ticka – restartuję aplikacje.");
-                            trayIcon.Visible = false;
-                            Application.Restart();
-                            Environment.Exit(0);
+                            HotRestart();
                         }
                         else
                         {
@@ -326,6 +328,7 @@ namespace DimScreenSaver
                 {
                     Log("✅ JavaWatcher wykrył powrót Panelo – anuluję follow-up.");
                     javaFollowUpTimer?.Dispose();
+                    javaFollowUpActive = false;
 
                     if (CurrentFormVideoPlayer != null && !CurrentFormVideoPlayer.IsDisposed)
                     {
@@ -445,8 +448,13 @@ namespace DimScreenSaver
 
         private void LoadConfig()
         {
+
+            
+
             string CleanValue(string line) =>
                 line.Split(new[] { "//" }, StringSplitOptions.None)[0].Trim();
+
+
 
             if (!File.Exists(configPath)) return;
 
@@ -538,6 +546,11 @@ namespace DimScreenSaver
             Log($"Wczytano config: {idleThresholdConfig}|{screenOffAfterSecondsConfig}|{dimBrightnessPercent}|{(wakeOnAudio ? 1 : 0)}|{(isTemporarilyDisabled ? 1 : 0)}|{(monitorJavaDialog ? 1 : 0)}|{(paneloErrorNotifyEnabled ? 1 : 0)}");
 
             Log($"[CONFIG APPLIED] tempIdleThreshold: {idleThresholdRuntime}, tempScreenOffAfterSeconds: {screenOffAfterSecondsRuntime}");
+
+
+            LoadHotRestartState();
+
+
         }
 
 
@@ -571,6 +584,67 @@ namespace DimScreenSaver
             }
 
             UpdateTrayIcon();
+        }
+
+
+        private void LoadHotRestartState()
+        {
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(StateFilePath));
+
+                if (!File.Exists(StateFilePath))
+                    return;
+
+                var json = File.ReadAllText(StateFilePath);
+                var state = JsonConvert.DeserializeObject<AppState>(json);
+
+                if (state != null && state.JavaFollowUpActive)
+                {
+                    javaFollowUpActive = true;
+                    Log("♻️ HotRestart aktywny – uruchamiam sekwencję JavaFollowUp");
+                    StartJavaFollowUpSequence();
+
+                   
+                }
+                // ❌ Usunięcie pliku, żeby nie zachował się do kolejnego uruchomienia
+                File.Delete(StateFilePath);
+            }
+            catch (Exception ex)
+            {
+                Log($"❌ Błąd odczytu stanu HotRestart: {ex.Message}");
+            }
+        }
+
+
+
+        public static void HotRestart()
+        {
+            try
+            {
+                var state = new AppState
+                {
+                    JavaFollowUpActive = javaFollowUpActive,
+            
+                };
+                Directory.CreateDirectory(Path.GetDirectoryName(StateFilePath));
+
+                var json = JsonConvert.SerializeObject(state, Formatting.Indented);
+                File.WriteAllText(StateFilePath, json);
+                Log("💾 Zapisano stan HotRestart do pliku state.json");
+            }
+            catch (Exception ex)
+            {
+                Log($"❌ Błąd zapisu HotRestart: {ex.Message}");
+            }
+
+            if (Instance != null && Instance.trayIcon != null)
+            {
+                Instance.trayIcon.Visible = false;
+            }
+            Application.Restart();
+            Environment.Exit(0);
+
         }
 
 
@@ -664,7 +738,7 @@ namespace DimScreenSaver
             };
 
             // 📄 TESTY (zakomentowane)
-            /*
+            
             var simulateJavaItem = new ToolStripMenuItem("\uD83D\uDD01 Test: zasymuluj zniknięcie okna Java");
             StyleMenuItem(simulateJavaItem);
             simulateJavaItem.Click += (s, e) =>
@@ -675,7 +749,16 @@ namespace DimScreenSaver
                 var videoForm = new FormVideoPlayer(videoPath);
                 videoForm.Show();
             };
-            menu.Items.Insert(0, simulateJavaItem);*/
+            menu.Items.Insert(0, simulateJavaItem);
+
+            var performHotRestartItem = new ToolStripMenuItem("♻️ Hot restart (z zachowaniem stanu)");
+            StyleMenuItem(performHotRestartItem);
+            performHotRestartItem.Click += (s, e) =>
+            {
+                Log("♻️ Wywołano ręczny HotRestart z menu");
+                HotRestart();
+            };
+            menu.Items.Insert(0, performHotRestartItem);
 
             /*
             var stopIdleTickItem = new ToolStripMenuItem("⏸️ Test: zatrzymaj idleCheckTimer");
@@ -1837,9 +1920,7 @@ namespace DimScreenSaver
                 if (recentTicks.Count > 1)
                 {
                     Log("💣 Wykryto nadmiarowe ticki. Restartuje aplikacje.");
-                    trayIcon.Visible = false;
-                    Application.Restart();
-                    Environment.Exit(0);
+                    HotRestart();
                 }
             }
             if (isTickRunning)
@@ -1893,7 +1974,7 @@ namespace DimScreenSaver
                 }
                 else
                 {
-                    Log($"⏱️ [MAIN TICK] IDLE: prog: {idleSeconds}s, sys: {idle}s, THRESHOLD: dim:{idleThresholdRuntime}s off:{screenOffAfterSecondsRuntime}s");
+                    Log($"⏱️ [MAIN TICK] IDLE: prog: {idleSeconds}s, sys: {idle}s, THRESHOLD: dim:{idleThresholdRuntime}s off:{screenOffAfterSecondsRuntime}s {javaFollowUpActive}");
                 }
 
                 var reasons = new List<string>();
@@ -1936,15 +2017,25 @@ namespace DimScreenSaver
                     idleSeconds >= screenOffAfterSecondsRuntime &&
                     !dimFormActive &&
                     !GlobalScreenOff)
-                {
-                    Log($"[MAIN TICK] 🌒 Ekran OFF przez IdleTrayApp | idle: {idleSeconds}");
+                    {
+                        if (javaFollowUpActive)
+                        {
+                            Log("🛑 Pomijam wyłączenie ekranu – trwa sekwencja follow-up Java");
+                            BalloonForm.ShowBalloon($"Pominięto wyłączenie: {idleSeconds}s/{screenOffAfterSecondsRuntime}s", "Wiadomość oczekuje na Panelo", 8000, false);
+                        }
+                        else
+                        {
+                            Log($"[MAIN TICK] 🌒 Ekran OFF przez IdleTrayApp | idle: {idleSeconds}");
 
-                    DisplayControl.TurnOff();
-                    ResetIdle("Wyłączanie ekranu");
-                    GlobalScreenOff = true;
-                    WaitForUserActivity = true;
-                    idleCheckTimer.Stop();
-                }
+                            DisplayControl.TurnOff();
+                            ResetIdle("Wyłączanie ekranu");
+                            GlobalScreenOff = true;
+                            WaitForUserActivity = true;
+                            idleCheckTimer.Stop();
+                        }
+                    }
+
+
             }
             finally
             {
@@ -1959,9 +2050,26 @@ namespace DimScreenSaver
             {
                 Log("❌ [ShowDimForm] Forma już otwarta – pomijam");
 
-
+                SafeStartIdleCheckTimer();
                 return;
             }
+
+            if (javaFollowUpActive)
+            {
+                Log("🚫 Pomijam przygaszenie ekranu – aktywna sekwencja JavaFollowUp.");
+                if (idleSeconds<screenOffAfterSecondsRuntime) BalloonForm.ShowBalloon($"Pominięto przygaszenie: {idleSeconds}s/{idleThresholdRuntime}s", "Wiadomość oczekuje na Panelo", 8000, false);
+                SafeStartIdleCheckTimer();
+                return;
+            }
+
+            if (Application.OpenForms.OfType<FormVideoPlayer>().Any())
+            {
+                Log("🚫 Pomijam przygaszenie ekranu – powiadomienie o wiadomości w trakcie");
+                SafeStartIdleCheckTimer();
+                return;
+            }
+
+
 
             dimFormIsOpen = true;
 
@@ -2192,35 +2300,59 @@ namespace DimScreenSaver
         }
 
 
+        public class AppState
+        {
+           
+                public bool JavaFollowUpActive { get; set; }
+                     
+            // Do dodania inne zmienne do hot resetu
+        }
+
+
         public void StartJavaFollowUpSequence()
         {
             const int FollowUpStartDelayMinutes = 5;
             const int FollowUpCheckIntervalSeconds = 90;
-            const int InactivityThreshold = 420;
+            const int InactivityThreshold = 420; 
 
             Log("📡 Rozpoczynam sekwencję monitorowania po zamknięciu FormVideoPlayer.");
+            javaFollowUpActive = true;
+            javaWatcher.FindJavaDialog();
 
             // 🧹 Ubij poprzedni follow-up timer
             javaFollowUpTimer?.Dispose();
+
 
             javaFollowUpTimer = new System.Threading.Timer(_ =>
             {
                 try
                 {
+
                     if (Process.GetProcessesByName("javaw").Length == 0)
                     {
                         Log("🟥 Java już nie istnieje – przerywam sekwencję follow-up.");
                         javaFollowUpTimer?.Dispose();
+                        javaFollowUpActive = false;
                         return;
                     }
 
                     if (javaWatcher == null || !monitorJavaDialog)
                         return;
 
+                    if (javaWatcher != null && javaWatcher.VisibleNow)
+                    {
+                        Log("✅ Okno Java 'Oczekiwanie na wiadomość' już widoczne – przerywam sekwencję follow-up.");
+                        javaFollowUpTimer?.Dispose();
+                        javaFollowUpActive = false;
+                        return;
+                    }
+
+
                     if (javaWatcher.VisibleNow)
                     {
                         Log("✅ Okno Java 'Oczekiwanie na wiadomość' wróciło – przerywam sekwencję follow-up.");
                         javaFollowUpTimer?.Dispose();
+                        javaFollowUpActive = false;
                         return;
                     }
 
@@ -2241,6 +2373,7 @@ namespace DimScreenSaver
                         }, null);
 
                         javaFollowUpTimer?.Dispose();
+                        javaFollowUpActive = false;
                         return;
                     }
 
@@ -2252,6 +2385,7 @@ namespace DimScreenSaver
                 {
                     Log($"❌ Błąd w Java follow-up: {ex.Message}");
                     javaFollowUpTimer?.Dispose();
+                    javaFollowUpActive = false;
                 }
             },
             null,
