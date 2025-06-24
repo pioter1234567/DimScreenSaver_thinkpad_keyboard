@@ -739,6 +739,7 @@ namespace DimScreenSaver
 
             // 📄 TESTY (zakomentowane)
             
+            /*
             var simulateJavaItem = new ToolStripMenuItem("\uD83D\uDD01 Test: zasymuluj zniknięcie okna Java");
             StyleMenuItem(simulateJavaItem);
             simulateJavaItem.Click += (s, e) =>
@@ -759,7 +760,7 @@ namespace DimScreenSaver
                 HotRestart();
             };
             menu.Items.Insert(0, performHotRestartItem);
-
+            */
             /*
             var stopIdleTickItem = new ToolStripMenuItem("⏸️ Test: zatrzymaj idleCheckTimer");
             StyleMenuItem(stopIdleTickItem);
