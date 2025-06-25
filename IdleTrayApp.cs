@@ -244,6 +244,11 @@ namespace DimScreenSaver
                     IdleTrayApp.Instance.brightnessForm?.Close();
                     IdleTrayApp.Instance.brightnessForm = new BrightnessForm(current);
                     IdleTrayApp.Instance.brightnessForm.Show();
+                    if (lastKnownBrightness != dimBrightnessPercent)
+                    {
+                        File.WriteAllText(BrightnessPath, lastKnownBrightness.ToString());
+                        Log($"[BRIGHTNESS FORM] Jasność zapisana do pliku: {lastKnownBrightness}%");
+                    }
                 }
             };
 
@@ -1809,6 +1814,11 @@ namespace DimScreenSaver
             if (value >= 0 && value <= 100)
                 lastKnownBrightness = value;
             Log($"Ustawiam lastKnownBrightness na {value}");
+            if (lastKnownBrightness != dimBrightnessPercent)
+            {
+                File.WriteAllText(BrightnessPath, lastKnownBrightness.ToString());
+                Log($"[SetLastKnownBrightness()] Jasność zapisana do pliku: {lastKnownBrightness}%");
+            }
         }
 
 
@@ -2728,6 +2738,11 @@ namespace DimScreenSaver
                         // ❗️NIE może być pominięte – nawet jeśli pominięto slider
                         SetKeyboardBacklightBasedOnBrightnessTick(brightness);
                         lastKnownBrightness = brightness;
+                        if (brightness != dimBrightnessPercent)
+                        {
+                            File.WriteAllText(BrightnessPath, brightness.ToString());
+                            Log($"[SUWAK] Jasność zapisana do pliku: {brightness}%");
+                        }
 
                     }, null);
 

@@ -89,7 +89,7 @@ namespace DimScreenSaver
         public DimForm(int screenOffAfterSeconds, int idleAlready, int dimBrightness)
         {
             logPath = Path.Combine(Path.GetTempPath(), "scrlog.txt");
-            brightnessPath = Path.Combine(Path.GetTempPath(), "brightness.txt");
+            brightnessPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "DimScreenSaver", "brightness.txt");
             started = DateTime.Now;
             int dimLevel = dimBrightness;
             
