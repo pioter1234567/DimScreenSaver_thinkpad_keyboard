@@ -768,28 +768,21 @@ namespace DimScreenSaver
             };
 
             // 📄 TESTY (zakomentowane)
-            
-            /*
-            var simulateJavaItem = new ToolStripMenuItem("\uD83D\uDD01 Test: zasymuluj zniknięcie okna Java");
-            StyleMenuItem(simulateJavaItem);
-            simulateJavaItem.Click += (s, e) =>
+
+
+            /*var simulateJavaItem = new ToolStripMenuItem("🔁 Test: odczekaj 4s i zasymuluj zniknięcie okna Java")
             {
-                Log("\uD83D\uDD01 Testowy przycisk → symuluję zniknięcie okna Java");
-                ResetByPopup();
-                string videoPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "alert.mp4");
-                var videoForm = new FormVideoPlayer(videoPath);
-                videoForm.Show();
+                CheckOnClick = true
+            };
+            StyleMenuItem(simulateJavaItem);
+            simulateJavaItem.CheckedChanged += async (s, e) =>
+            {
+                bool sim = simulateJavaItem.Checked;
+                await Task.Delay(4000);
+                Log($"🔁 {(sim ? "Włączam" : "Wyłączam")} symulację zniknięcia okna Java");
+                IdleTrayApp.Instance.javaWatcher.SetSimulateInvisible(sim);
             };
             menu.Items.Insert(0, simulateJavaItem);
-
-            var performHotRestartItem = new ToolStripMenuItem("♻️ Hot restart (z zachowaniem stanu)");
-            StyleMenuItem(performHotRestartItem);
-            performHotRestartItem.Click += (s, e) =>
-            {
-                Log("♻️ Wywołano ręczny HotRestart z menu");
-                HotRestart();
-            };
-            menu.Items.Insert(0, performHotRestartItem);
             */
             /*
             var stopIdleTickItem = new ToolStripMenuItem("⏸️ Test: zatrzymaj idleCheckTimer");

@@ -184,11 +184,11 @@ public class FormVideoPlayer : Form
         {
             timer.Stop();
 
-            if (this.IsDisposed || !this.IsHandleCreated)
-            {
-                Log("🔕 Forma została wcześniej zamknięta – nie odtwarzam dźwięku notif.wav");
-                return;
-            }
+           if (this.IsDisposed || !this.IsHandleCreated)
+           {
+               Log("🔕 Forma została wcześniej zamknięta – nie odtwarzam dźwięku notif.wav");
+               return;
+           }
 
             try
             {
@@ -308,11 +308,9 @@ public class FormVideoPlayer : Form
 
             if (title.StartsWith("Panelo v", StringComparison.OrdinalIgnoreCase))
             {
-                // 1) przywróć, jeśli zminimalizowane
-                ShowWindow(hWnd, SW_RESTORE);
-                // 2) zmaksymalizuj (z belką i ramką)
+
                 ShowWindow(hWnd, SW_MAXIMIZE);
-                // 3) ustaw na wierzchu
+                //  ustaw na wierzchu
                 SetForegroundWindow(hWnd);
                 return false; // przerwij dalsze przeszukiwanie
             }

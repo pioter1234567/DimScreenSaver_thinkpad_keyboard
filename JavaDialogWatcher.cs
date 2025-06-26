@@ -61,6 +61,8 @@ public class JavaDialogWatcher
     private readonly string logPath;
     private System.Windows.Forms.Timer loopTimer;
 
+    private bool simulateInvisible = false;
+
     public void StartLoopingMonitor()
     {
         if (loopTimer != null)
@@ -119,7 +121,13 @@ public class JavaDialogWatcher
     }
 
 
-
+    /// <summary>
+    /// Jeżeli true, to przy następnym ticku symulujemy, że okno nie jest widoczne.
+    /// </summary>
+    public void SetSimulateInvisible(bool value)
+    {
+        simulateInvisible = value;
+    }
 
     public JavaDialogWatcher() { logPath = Path.Combine(Path.GetTempPath(), "scrlog.txt"); }
     private static void Log(string msg) => AppLogger.Log("JavaWatcher", msg);
@@ -182,7 +190,11 @@ public class JavaDialogWatcher
                 return;
             }
             LastTickTime = DateTime.Now;
-            bool visibleNow = IsWindowVisible(hwnd);
+            bool visibleNow = simulateInvisible
+            // jeśli symulacja włączona, to zawsze false
+             ? false
+            // w przeciwnym razie odczyt z WinAPI
+             : IsWindowVisible(hwnd);
 
 
             if (visibleNow && !wasPreviouslyVisible)
