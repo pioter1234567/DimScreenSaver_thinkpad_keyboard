@@ -36,6 +36,9 @@ namespace DimScreenSaver
 
             messageWindow?.Dispose();
             messageWindow = null;
+            OnMonitorTurnedOn = null;
+            OnMonitorTurnedOff = null;
+
         }
 
         // Logi
@@ -107,11 +110,13 @@ namespace DimScreenSaver
                             {
                                 OnMonitorTurnedOn?.Invoke();
                                 Log("🟢 Ekran fizycznie się WŁĄCZYŁ");
+                                IdleTrayApp.Instance?.NotifyPowerEvent();
                             }
                             else
                             {
                                 OnMonitorTurnedOff?.Invoke();
                                 Log("🔴 [MonitorStateWatcher] Ekran fizycznie się WYŁĄCZYŁ");
+                                IdleTrayApp.Instance?.NotifyPowerEvent();
                             }
                         }
                     }

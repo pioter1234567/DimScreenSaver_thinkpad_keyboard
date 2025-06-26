@@ -10,6 +10,8 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using System.Text;
+
 
 
 
@@ -47,6 +49,25 @@ public class FormVideoPlayer : Form
     private Point initialCursor;
     private System.Windows.Forms.Timer movementCheckTimer;
     private static void Log(string msg) => AppLogger.Log("FormVideoPlayer", msg);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+    private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    private static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+
+    [DllImport("user32.dll")]
+    private static extern int GetWindowTextLength(IntPtr hWnd);
+
+    private const int SW_RESTORE = 9;
+    private const int SW_MAXIMIZE = 3;
 
     public FormVideoPlayer(string videoPath)
     {
@@ -159,7 +180,7 @@ public class FormVideoPlayer : Form
 
 
         var timer = new System.Windows.Forms.Timer { Interval = 2000 };
-        timer.Tick += (s, e) =>
+        timer.Tick += async (s, e) =>
         {
             timer.Stop();
 
@@ -181,7 +202,6 @@ public class FormVideoPlayer : Form
                     waveOut.Volume = 1.0f;
                     waveOut.Play();
 
-                    
                     waveOut.PlaybackStopped += (sender2, args2) =>
                     {
                         reader.Dispose();
@@ -189,6 +209,27 @@ public class FormVideoPlayer : Form
                     };
 
                     Log("🔔 Dźwięk notyfikacji został zagrany (via NAudio).");
+
+                    // --- opóźnienie i podciągnięcie Panelo ---
+                    await Task.Delay(700);
+
+                    if (IdleTrayApp.Instance?.paneloBringToFrontEnabled ?? false)
+                    {
+                        try
+                        {
+                            BringPaneloToFront();
+                            Log("🔝 Ustawiono okno Panelo v… na wierzchu");
+                        }
+                        catch (Exception ex)
+                        {
+                            Log($"❌ Nie udało się podciągnąć Panelo: {ex.Message}");
+                        }
+                    }
+                    else
+                    {
+                        Log("ℹ️ Opcja 'Przesuwaj na wierzch' jest wyłączona — pomijam podciągnięcie Panelo.");
+                    }
+
                 }
                 else
                 {
@@ -249,6 +290,34 @@ public class FormVideoPlayer : Form
         alreadyClosing = true;
         Log($"✅ SpróbujZamknąć() wywołana z \"{źródło}\" – wykonuję ZamknijObieFormy()");
         ZamknijObieFormy();
+    }
+
+
+
+
+    private void BringPaneloToFront()
+    {
+        EnumWindows((hWnd, lParam) =>
+        {
+            int len = GetWindowTextLength(hWnd);
+            if (len == 0) return true;
+
+            var sb = new StringBuilder(len + 1);
+            GetWindowText(hWnd, sb, sb.Capacity);
+            string title = sb.ToString();
+
+            if (title.StartsWith("Panelo v", StringComparison.OrdinalIgnoreCase))
+            {
+                // 1) przywróć, jeśli zminimalizowane
+                ShowWindow(hWnd, SW_RESTORE);
+                // 2) zmaksymalizuj (z belką i ramką)
+                ShowWindow(hWnd, SW_MAXIMIZE);
+                // 3) ustaw na wierzchu
+                SetForegroundWindow(hWnd);
+                return false; // przerwij dalsze przeszukiwanie
+            }
+            return true; // szukaj dalej
+        }, IntPtr.Zero);
     }
     private static IntPtr SetHook(LowLevelKeyboardProc proc)
     {

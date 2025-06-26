@@ -376,6 +376,12 @@ namespace DimScreenSaver
 
         public void CloseFromScreenOff()
         {
+            if (this.InvokeRequired)
+            {
+                this.BeginInvoke((Action)CloseFromScreenOff);
+                return;
+            }
+
             screenTurnedOff = true;
             Log("Zamknięcie przez MonitorStateWatcher (ekran wyłączony)");
             isClosingIntended = true;

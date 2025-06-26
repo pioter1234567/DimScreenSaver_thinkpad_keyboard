@@ -44,6 +44,16 @@ public class JavaDialogWatcher
     [return: MarshalAs(UnmanagedType.Bool)]
     static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
 
+    // importy do przywracania/ustawiania okna na wierzchu
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    const int SW_RESTORE = 9;
+
+
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     static extern bool IsWindow(IntPtr hWnd);
@@ -214,6 +224,7 @@ public class JavaDialogWatcher
                                 {
                                     IdleTrayApp.CurrentFormVideoPlayer.Show();
                                     Log("▶ Pokazuję FormVideoPlayer");
+                                    
                                 }
                             }
                             catch (Exception ex)
@@ -335,6 +346,28 @@ public class JavaDialogWatcher
         }, IntPtr.Zero);
 
         return found;
+    }
+
+
+
+    private void BringPaneloToFront()
+    {
+        EnumWindows((hWnd, lParam) =>
+        {
+            var sb = new StringBuilder(256);
+            GetWindowText(hWnd, sb, sb.Capacity);
+            string title = sb.ToString();
+
+            if (title.StartsWith("Panelo v", StringComparison.OrdinalIgnoreCase))
+            {
+                // przywróć, jeśli zminimalizowane
+                ShowWindow(hWnd, SW_RESTORE);
+                // ustaw na wierzchu
+                SetForegroundWindow(hWnd);
+                return false; // przerwij dalsze enum
+            }
+            return true; // szukaj dalej
+        }, IntPtr.Zero);
     }
 
     [DllImport("user32.dll", SetLastError = true)]

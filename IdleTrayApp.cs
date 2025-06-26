@@ -1,4 +1,5 @@
 
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -11,7 +12,7 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using Newtonsoft.Json;
+using static PowerBroadcastWatcher;
 
 
 
@@ -46,6 +47,8 @@ namespace DimScreenSaver
         public static int lastIdleTime = -1;
         public static DateTime? lastIdleTickTime = null;
         public DateTime? dimFormClosedAt = null;
+        private DateTime? lastPowerEventTime = null;
+        private const int PowerEventSkipSeconds = 10;
         public static DateTime? lastSkippedDimNotificationTime = null;
         private System.Threading.Timer idleWatchdogTimer;
         public static bool WaitForUserActivity = false;
@@ -62,6 +65,7 @@ namespace DimScreenSaver
         private System.Threading.Timer javaWatchdogTimer;
         public static bool GlobalScreenOff = false;
         public static bool javaFollowUpActive = false;
+
 
 
 
@@ -103,6 +107,8 @@ namespace DimScreenSaver
         private ToolStripMenuItem paneloMenu;
         private ToolStripMenuItem paneloErrorNotifyItem;
         public bool paneloErrorNotifyEnabled = true;
+        private ToolStripMenuItem paneloBringToFrontItem;
+        public bool paneloBringToFrontEnabled = true;
 
         // 6. 🐭 Mouse event API
         [DllImport("user32.dll")]
@@ -363,7 +369,7 @@ namespace DimScreenSaver
                 {
 
 
-                    ClearWakeState();
+                    UISyncContext.Post(async _ => await ClearWakeState(), null);
 
 
 
@@ -422,6 +428,8 @@ namespace DimScreenSaver
                     idleCheckTimer.Stop();
                     wmiWatcher?.Stop();
                     wmiWatcher?.Dispose();
+                    powerWatcher?.Dispose();
+                    powerWatcher = null;
                     Log("🧹 Cleanup – odłączono globalny hook klawiatury i WMI, zamknięto ikonkę, zatrzymano timer");
                 }
                 catch { }
@@ -509,29 +517,35 @@ namespace DimScreenSaver
                 idleCheckTimer?.Start();
             }
 
-            //7. Blad panelu
+            //7. Błąd panelu
             if (lines.Length >= 7)
                 paneloErrorNotifyEnabled = CleanValue(lines[6]) == "1";
             else
                 paneloErrorNotifyEnabled = true;
 
-            if (paneloErrorNotifyItem != null)
-                paneloErrorNotifyItem.Checked = paneloErrorNotifyEnabled;
 
-            //8. Budzik
-            if (lines.Length >= 8 && int.TryParse(CleanValue(lines[7]), out int wakeupMins))
+
+            //8. Przesuwaj Panelo na wierzch
+            if (lines.Length >= 8)
+                paneloBringToFrontEnabled = CleanValue(lines[7]) == "1";
+            else
+                paneloBringToFrontEnabled = false;
+
+
+
+            //9. Budzik
+            if (lines.Length >= 9 && int.TryParse(CleanValue(lines[8]), out int wakeupMins))
                 wakeupIntervalMinutes = wakeupMins;
             else
                 wakeupIntervalMinutes = -1;
 
-            // 9. Automatyczne sterowanie klawiaturą
-            if (lines.Length >= 9)
-                keyboardAutoEnabled = CleanValue(lines[8]) == "1";
+            // 10. Automatyczne sterowanie klawiaturą
+            if (lines.Length >= 10)
+                keyboardAutoEnabled = CleanValue(lines[9]) == "1";
             else
                 keyboardAutoEnabled = true;
 
-            if (keyboardAutoToggleItem != null)
-                keyboardAutoToggleItem.Checked = keyboardAutoEnabled;
+        
 
 
 
@@ -547,10 +561,20 @@ namespace DimScreenSaver
             if (disableItem != null)
                 disableItem.Checked = isTemporarilyDisabled;
 
-            // logi
-            Log($"Wczytano config: {idleThresholdConfig}|{screenOffAfterSecondsConfig}|{dimBrightnessPercent}|{(wakeOnAudio ? 1 : 0)}|{(isTemporarilyDisabled ? 1 : 0)}|{(monitorJavaDialog ? 1 : 0)}|{(paneloErrorNotifyEnabled ? 1 : 0)}");
+            if (keyboardAutoToggleItem != null)
+                keyboardAutoToggleItem.Checked = keyboardAutoEnabled;
 
-            Log($"[CONFIG APPLIED] tempIdleThreshold: {idleThresholdRuntime}, tempScreenOffAfterSeconds: {screenOffAfterSecondsRuntime}");
+            if (paneloBringToFrontItem != null)
+                paneloBringToFrontItem.Checked = paneloBringToFrontEnabled;
+
+            if (paneloErrorNotifyItem != null)
+                paneloErrorNotifyItem.Checked = paneloErrorNotifyEnabled;
+
+            
+            // logi
+            Log($"Wczytano config: {configPath}");
+
+            
 
 
             LoadHotRestartState();
@@ -570,6 +594,7 @@ namespace DimScreenSaver
               $"{(disableItem?.Checked == true ? "1" : "0")} // 0-normalnie, 1-tymczasowo zablokowane",
               $"{(monitorJavaDialog ? "1" : "0")} // 0-Panelo nie jest śledzone - brak budzika, 1-Zniknięcie okienka oczekiwania na wiadomość w Panelo powoduje włączenie budzika",
               $"{(paneloErrorNotifyEnabled ? "1" : "0")} // 0-nie pokazuj błędów Panelo, 1-pokaż bąbel+dźwięk",
+              $"{(paneloBringToFrontEnabled ? "1" : "0")} // 0-nie przesuwaj, 1-przesuwaj na wierzch",
               $"{wakeupIntervalMinutes} // interwał budzika cyklicznego w minutach (-1 = wyłączony)",
               $"{(keyboardAutoEnabled ? "1" : "0")} // 0-wyłączone auto klawiatura, 1-włączone",
 
@@ -578,7 +603,7 @@ namespace DimScreenSaver
             try
             {
                 File.WriteAllLines(configPath, lines);
-                Log($"Zapisano config: {idleThresholdConfig}|{screenOffAfterSecondsConfig}|{dimBrightnessPercent}|{(wakeOnAudio ? 1 : 0)}|{(disableItem?.Checked == true ? 1 : 0)}|{(monitorJavaDialog ? 1 : 0)}|{(paneloErrorNotifyEnabled ? 1 : 0)}");
+                Log($"Zapisano config: {configPath}");
 
 
 
@@ -971,6 +996,22 @@ namespace DimScreenSaver
                 }
             };
             paneloMenu.DropDownItems.Add(paneloErrorNotifyItem);
+
+
+            paneloBringToFrontItem = new ToolStripMenuItem("Przesuwaj na wierzch")
+            {
+                Checked = paneloBringToFrontEnabled,
+                CheckOnClick = true
+            };
+            StyleSubMenuItem(paneloBringToFrontItem);
+            paneloBringToFrontItem.CheckedChanged += (s, e) =>
+            {
+                paneloBringToFrontEnabled = paneloBringToFrontItem.Checked;
+                SaveConfig();
+            };
+            paneloMenu.DropDownItems.Add(paneloBringToFrontItem);
+
+
 
             wakeupMenu = new ToolStripMenuItem("Budzik cykliczny");
             AddWakeupOption("10 min", 10);
@@ -2014,7 +2055,7 @@ namespace DimScreenSaver
 
                     if (!GlobalScreenOff)
                     {
-                        trayIcon.Text = "[MAIN TICK] Uruchamiam przygaszanie...";
+                      
                         ShowDimForm();
                     }
                     else
@@ -2055,8 +2096,24 @@ namespace DimScreenSaver
         }
 
 
+        public void NotifyPowerEvent()
+        {
+            lastPowerEventTime = DateTime.Now;
+            Log($"🔄 Blokada dimForm na {PowerEventSkipSeconds}s z NotifyPowerEvent() ");
+        }
+
         private async void ShowDimForm()
         {
+
+            if (lastPowerEventTime.HasValue && (DateTime.Now - lastPowerEventTime.Value).TotalSeconds < PowerEventSkipSeconds)
+            {
+                Log("❌ Pomijam przygaszanie – blokada po power evencie");
+                await Task.Delay(200);
+                lastPowerEventTime = null;            // resetujemy, by nie blokować późniejszych przygaszeń
+                SafeStartIdleCheckTimer();        // wznów normalne odliczanie
+                return;
+            }
+
             if (dimFormIsOpen)
             {
                 Log("❌ [ShowDimForm] Forma już otwarta – pomijam");
