@@ -29,52 +29,38 @@ namespace DimScreenSaver
         private bool isClosingIntended = false;
         private DateTime? screenOffTimerStartedAt = null;
         private int screenOffDelaySeconds = 0;
-        private static void Log(string msg) => AppLogger.Log("DimForm", msg);
-        private void LogDim(string message)
+        private static void Log(string msg) => _ = AppLogger.LogAsync("DimForm", msg);
+        private static readonly string _configPath
+     = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "settings.cfg");
+
+        private static async Task<bool> GetWakeOnAudioFlagAsync()
         {
-            string logEntry = $"[DimForm] {DateTime.Now:HH:mm:ss} {message}";
             try
             {
-                const int maxLines = 5000;
-                List<string> lines = new List<string>();
-
-                if (File.Exists(logPath))
+                if (File.Exists(_configPath))
                 {
-                    lines = File.ReadAllLines(logPath).ToList();
-                    if (lines.Count >= maxLines)
-                        lines = lines.Skip(lines.Count - (maxLines - 1)).ToList();
-                }
+                    
+                    var lines = await Task.Run(() => File.ReadAllLines(_configPath))
+                                          .ConfigureAwait(false);
 
-                lines.Add(logEntry);
-                File.WriteAllLines(logPath, lines);
-            }
-            catch { }
-        }
-
-      
-
-        private bool GetWakeOnAudioFlag()
-        {
-            string configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "settings.cfg");
-
-            try
-            {
-                if (File.Exists(configPath))
-                {
-                    var lines = File.ReadAllLines(configPath);
                     if (lines.Length >= 2)
                     {
-                        string raw = lines[1].Split(new[] { "//" }, StringSplitOptions.None)[0].Trim();
+                        string raw = lines[1]
+                            .Split(new[] { "//" }, StringSplitOptions.None)[0]
+                            .Trim();
+
                         return raw == "1";
                     }
                 }
             }
             catch (Exception ex)
             {
+                
                 Log($"[GetWakeOnAudioFlag] Błąd: {ex.Message}");
             }
 
-            return true; 
+            
+            return true;
         }
 
         private void StopScreenOffTimer(string reason)
@@ -260,9 +246,10 @@ namespace DimScreenSaver
                 }
 
                 dimFormMonitor = new Timer {Interval = 7000};
-                dimFormMonitor.Tick += (snd, evt) =>
+                dimFormMonitor.Tick += async (snd, evt) =>
                 {
-                    bool wakeOnAudio = GetWakeOnAudioFlag();
+                    // Odczyt flagi z pliku asynchronicznie
+                    bool wakeOnAudio = await GetWakeOnAudioFlagAsync().ConfigureAwait(true);
                     bool playing = AudioWatcher.IsAudioPlaying();
 
                     Log($"[dimFormMonitor] Tick → WakeOnAudio: {wakeOnAudio}, IsAudioPlaying: {playing}");

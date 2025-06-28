@@ -21,6 +21,7 @@ namespace DimScreenSaver
         private int[] lastCustomMap = null;
         private bool isProgrammaticForceLevelUpdate = false;
         public Label labelCurrentBrightness => lblCurrentBrightness;
+        private static void Log(string msg) => _ = AppLogger.LogAsync("FormOptions", msg);
 
 
         public FormOptions()
@@ -89,16 +90,19 @@ namespace DimScreenSaver
 
         private void BtnSet0_Click(object sender, EventArgs e)
         {
+            Log("Testuję jasność klawiatury 0");
             IdleTrayApp.Instance?.keyboard?.Set(0);
         }
 
         private void BtnSet1_Click(object sender, EventArgs e)
         {
+            Log("Testuję jasność klawiatury 1");
             IdleTrayApp.Instance?.keyboard?.Set(1);
         }
 
         private void BtnSet2_Click(object sender, EventArgs e)
         {
+            Log("Testuję jasność klawiatury 2");
             IdleTrayApp.Instance?.keyboard?.Set(2);
         }
         private async void FormOptions_Load(object sender, EventArgs e)
@@ -171,6 +175,7 @@ namespace DimScreenSaver
 
             // Finalizacja
             Properties.Settings.Default.Save();
+            Log($"Zapisano ustawienia");
 
 
         }
@@ -323,19 +328,23 @@ namespace DimScreenSaver
         {
             cmbForceLevel.Visible = rbForceLevel.Checked;
             UpdateBrightnessEditorForForcedLevel();
-            ApplySettings();
+                        
+            if (rbForceLevel.Checked)
+                ApplySettings();
         }
         private void RbUseBrightnessMap_CheckedChanged(object sender, EventArgs e)
         {
-            if (rbUseBrightnessMap.Checked && lastCustomMap != null)
+            if (rbUseBrightnessMap.Checked)
             {
-                for (int i = 0; i < lastCustomMap.Length; i++)
-                    brightnessEditor.SetLevel(i, lastCustomMap[i]);
-
-                lastCustomMap = null; // reset
+                if (lastCustomMap != null)
+                {
+                    for (int i = 0; i < lastCustomMap.Length; i++)
+                        brightnessEditor.SetLevel(i, lastCustomMap[i]);
+                    lastCustomMap = null;
+                }
+                ApplySettings();
             }
-
-            ApplySettings();
+            // jeśli odkliknięto “Use Map”, nie wołamy ApplySettings ponownie
         }
 
         private void Button1_Click(object sender, EventArgs e)

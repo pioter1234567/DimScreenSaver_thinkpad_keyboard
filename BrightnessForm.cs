@@ -45,7 +45,7 @@ public class BrightnessForm : Form
     [DllImport("User32.dll")]
     private static extern IntPtr MonitorFromWindow(IntPtr hwnd, int dwFlags);
 
-    private static void Log(string msg) => AppLogger.Log("BrightnessForm", msg);
+    private static void Log(string msg) => _ = AppLogger.LogAsync("BrightnessForm", msg);
     private int lastSentValue = -1;
     private System.Windows.Forms.Timer dragTimer;
 
@@ -61,37 +61,7 @@ public class BrightnessForm : Form
         brightnessPollTimer?.Dispose();
     }
 
-    private static void LogBrightness(string message)
-    {
-        string logFile = logPath;
-        string logEntry = $"[BrightnessForm] {DateTime.Now:HH:mm:ss} {message}";
-
-        try
-        {
-            const int maxLines = 5000;
-
-            // odczytaj istniejące linie (jeśli plik istnieje)
-            List<string> lines = new List<string>();
-            if (File.Exists(logFile))
-            {
-                lines = File.ReadAllLines(logFile).ToList();
-
-                // ogranicz do ostatnich maxLines - 1, zostaw miejsce na nowy wpis
-                if (lines.Count >= maxLines)
-                    lines = lines.Skip(lines.Count - (maxLines - 1)).ToList();
-            }
-
-            // dodaj nową linię
-            lines.Add(logEntry);
-
-            // zapisz z powrotem
-            File.WriteAllLines(logFile, lines);
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"[LogIdle] Błąd logowania: {ex.Message}");
-        }
-    }
+    
 
 
     protected override void Dispose(bool disposing)
@@ -352,7 +322,7 @@ public class BrightnessForm : Form
 
                 // zabezpieczenie przed nieprawidłową wartością
                 if (corrected >= slider.Minimum && corrected <= slider.Maximum)
-                    Log("🐔🐔🐔pseudonim KURKA 🐔🐔🐔🐔🐔🐔🐔🐔🐔");
+                   // Log("🐔🐔🐔 KURKA 🐔🐔🐔🐔🐔🐔🐔🐔🐔");
                     slider.Value = corrected;
 
                 return;
@@ -490,7 +460,7 @@ public class BrightnessForm : Form
         /* // Kontener nakładający oba na siebie
          var valueContainer = new Panel
          {
-             Size = new Size(50, 60), // lub AutoSize = true jeśli preferujesz
+             Size = new Size(50, 60), 
              Margin = new Padding(0, 7, 0, 0),
              Padding = Padding.Empty
          };*/
@@ -546,14 +516,14 @@ public class BrightnessForm : Form
             }
             else if (knownBrighthtness >= 0 && knownBrighthtness <= 100)
             {
-            Log("🐸🐸🐸pseudonim ŻABKA🐸🐸🐸🐸🐸🐸🐸 ");
+           // Log("🐸🐸🐸pseudonim ŻABKA🐸🐸🐸🐸🐸🐸🐸 ");
             slider.Value = knownBrighthtness;
                 valueLabel.Text = knownBrighthtness.ToString();
                 Log($"🎚️ Ustawiam slider na start: {slider.Value} (lastKnownBrightness = {knownBrighthtness})");
             }
             else
             {
-            Log("🐷🐷🐷pseudonim ŚWINKA🐷🐷🐷🐷🐷🐷🐷🐷 ");
+           // Log("🐷🐷🐷pseudonim ŚWINKA🐷🐷🐷🐷🐷🐷🐷🐷 ");
             slider.Value = currentBrightness;
                 valueLabel.Text = currentBrightness.ToString();
                 Log($"🎚️ Ustawiam slider na fallback: {currentBrightness} (brak sensownej wartości lastKnownBrightness )");
@@ -623,58 +593,7 @@ public class BrightnessForm : Form
         };
         autoCloseTimer.Start();
         lastUserInteraction = DateTime.Now;
-        /* ZASTĄPIONE PRZEZ HOOK WMI
-        brightnessPollTimer = new System.Windows.Forms.Timer { Interval = 500 };
-        brightnessPollTimer.Tick += async (s, e) =>
-        {
-            slider.InteractionLocked = IdleTrayApp.dimFormActive;
-            if (isBatterySaverActive)
-            {
-                
-                return;
-            }
-            if (IdleTrayApp.PreparingToDim)
-            {
-                Log("⛔ PreparingToDim aktywne – pomijam polling");
-                return;
-            }
-
-            if (IdleTrayApp.dimFormActive)
-            {
-                Log("⛔ DimForm aktywny – pomijam polling jasności");
-                return;
-            }
-
-            if (IdleTrayApp.Instance?.dimFormClosedAt is DateTime dt &&
-                (DateTime.Now - dt).TotalSeconds < 1.0)
-            {
-                Log("⏳ Odczekuję 1s po zamknięciu DimForm – pomijam polling");
-                return;
-            }
-
-            if (isAdjusting) return;
-
-            if ((DateTime.Now - brightnessSetAt < TimeSpan.FromSeconds(1)) ||
-                (DateTime.Now - mouseDownAt < TimeSpan.FromSeconds(1)) ||
-                (DateTime.Now - scrollStartedAt < TimeSpan.FromSeconds(1)))
-                return;
-
-            isUpdatingFromPolling = true;
-
-            Log($"🔄 Polluje jasność");
-            int current = await IdleTrayApp.GetCurrentBrightnessAsync();
-            IdleTrayApp.Instance?.SetLastKnownBrightness(current);
-
-            if (slider.Value != current)
-                slider.Value = current;
-
-            valueLabel.Text = current.ToString();
-
-            isUpdatingFromPolling = false;
-        };
-
-        brightnessPollTimer.Start();
-        */
+     
 
         // ⛔ Zamknij formę po kliknięciu poza nią + obsługa MouseUp
         IdleTrayApp.MouseHook.Start((pt, btn, isDown) =>
@@ -732,7 +651,7 @@ public class BrightnessForm : Form
     public async Task AnimateSliderTo(int targetValue, int stepDelay = 1)
     {
         int current = slider.Value;
-        Log("jade jade");
+      //  Log("jade jade");
         if (current == targetValue)
             return;
 

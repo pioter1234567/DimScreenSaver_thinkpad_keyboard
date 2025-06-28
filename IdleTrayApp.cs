@@ -17,6 +17,7 @@ using static PowerBroadcastWatcher;
 
 
 
+
 namespace DimScreenSaver
 {
 
@@ -65,6 +66,8 @@ namespace DimScreenSaver
         private System.Threading.Timer javaWatchdogTimer;
         public static bool GlobalScreenOff = false;
         public static bool javaFollowUpActive = false;
+        private const int WatchdogIntervalMs = 2 * 60 * 1000;    // 2 min
+        private const int WatchdogRetryMs = 30 * 1000;       // 30 s
 
 
 
@@ -93,7 +96,7 @@ namespace DimScreenSaver
 
 
         // 5. 📛 Ikony i menu trayowe
-        private NotifyIcon trayIcon;
+        private static NotifyIcon trayIcon;
         private Icon iconEnabled;
         private Icon iconDisabled;
         private Icon iconOnlyOff;
@@ -121,11 +124,11 @@ namespace DimScreenSaver
         // 7. 🛠️ Pozostałe / narzędziowe
         private Control guiInvoker = new Control();
         private static readonly string configPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "DimScreenSaver", "settings.cfg");
-        private static readonly string StateFilePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "DimScreenSaver", "state.json");
+
         private static readonly string BrightnessPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "DimScreenSaver", "brightness.txt");
 
         public static IdleTrayApp Instance { get; private set; }
-        private static void Log(string msg) => AppLogger.Log("IdleTray", msg);
+        private static void Log(string msg) => _ = AppLogger.LogAsync("IdleTray", msg);
 
 
 
@@ -150,43 +153,9 @@ namespace DimScreenSaver
         private const int MaxLines = 5000;
         private static string logFile = Path.Combine(Path.GetTempPath(), "scrlog.txt");
 
-        private static void LogIdle(string message)
-        {
-            try
-            {
-                string entry = $"[IdleTray] {DateTime.Now:HH:mm:ss} {message}";
-                lock (logLock)
-                {
-                    File.AppendAllText(logFile, entry + Environment.NewLine);
-                    logCounter++;
+ 
 
-                    if (logCounter % TrimFrequency == 0)
-                        TrimLogFile();
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[LogIdle] Błąd logowania: {ex.Message}");
-            }
-        }
 
-        private static void TrimLogFile()
-        {
-            try
-            {
-                if (!File.Exists(logFile)) return;
-
-                var lines = File.ReadAllLines(logFile);
-                if (lines.Length <= MaxLines) return;
-
-                var trimmed = lines.Skip(lines.Length - MaxLines).ToArray();
-                File.WriteAllLines(logFile, trimmed);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[LogIdle] Błąd przycinania loga: {ex.Message}");
-            }
-        }
 
 
 
@@ -220,12 +189,18 @@ namespace DimScreenSaver
             ContextMenuStrip menu = BuildContextMenu();
 
             // 🛎️ NotifyIcon musi być zainicjalizowany PRZED LoadConfig
+
+
             trayIcon = new NotifyIcon
             {
                 Icon = iconEnabled,
                 ContextMenuStrip = menu,
                 Visible = true
             };
+
+
+
+
 
             // 📂 Wczytanie ustawień (nie przed NotifyIcon!)
             LoadConfig();
@@ -252,8 +227,19 @@ namespace DimScreenSaver
                     IdleTrayApp.Instance.brightnessForm.Show();
                     if (lastKnownBrightness != dimBrightnessPercent)
                     {
-                        File.WriteAllText(BrightnessPath, lastKnownBrightness.ToString());
-                        Log($"[BRIGHTNESS FORM] Jasność zapisana do pliku: {lastKnownBrightness}%");
+                        // odładamy zapis na wątek z puli
+                        _ = Task.Run(() =>
+                        {
+                            try
+                            {
+                                File.WriteAllText(BrightnessPath, lastKnownBrightness.ToString());
+                                Log($"[TrayIcon] Jasność zapisana do pliku: {lastKnownBrightness}%");
+                            }
+                            catch (Exception ex)
+                            {
+                                Log($"❌ Błąd zapisu jasności w MouseUp: {ex.Message}");
+                            }
+                        });
                     }
                 }
             };
@@ -273,60 +259,20 @@ namespace DimScreenSaver
             }
 
 
-            // 🐶 Watchdog – sprawdza, czy tick działa
-            if (idleWatchdogTimer == null)
-            {
-                idleWatchdogTimer = new System.Threading.Timer(_ =>
-                {
-                    try
-                    {
 
 
-                        // 1) Sprawdzenie, czy SafeStart był w ciągu ostatnich 30s
-                        bool safeStartRecent = lastSafeStartIdleCheckTimerRun.HasValue
-                            && (DateTime.Now - lastSafeStartIdleCheckTimerRun.Value).TotalSeconds < 30;
 
-                        // 2) Zbieranie powodów pominięcia
-                        var powody = new List<string>();
-                        if (isTemporarilyDisabled) powody.Add("isTemporarilyDisabled=true");
-                        if (dimFormActive) powody.Add("dimFormActive=true");
-                        if (GlobalScreenOff) powody.Add("GlobalScreenOff=true");
-                        if (safeStartRecent) powody.Add("SafeStartIdleCheckTimer<30s");
 
-                        // 3) Pominięcie, jśli któryś powód występuje, pomijamy
-                        if (powody.Count > 0)
-                        {
-                            Log("🐶 Watchdog Idle: pomijam sprawdzanie ticka przez: " + string.Join(", ", powody));
-                            return;
-                        }
+            StartIdleWatchdog();
 
-                        var last = lastIdleTickTime;
-                        if (last == null)
-                        {
-                            Log("🐶 Watchdog Idle: brak danych o ticku – nie robię nic.");
-                            return;
-                        }
 
-                        var diff = DateTime.Now - last.Value;
-                        if (diff.TotalMinutes > 1)
-                        {
-                            System.Threading.Thread.Sleep(100);
-                            Log("💣 Watchdog Idle: brak ticka – restartuję aplikacje.");
-                            HotRestart();
-                        }
-                        else
-                        {
-                            Log("🐶 Watchdog Idle: tick aktualny.");
 
-                            // UpdateJavaWatcherState();
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Log($"❌ Watchdog Idle: błąd – {ex.Message}");
-                    }
-                }, null, 0, 2 * 60 * 1000);
-            }
+
+
+
+
+
+           
 
 
             // 🔁 Ponowne ustawienie ikonki po wszystkim
@@ -438,6 +384,13 @@ namespace DimScreenSaver
 
         }
 
+        /// <summary>
+        /// Dostęp tylko do odczytu do instancji NotifyIcon.
+        /// </summary>
+        public static NotifyIcon TrayIcon
+        {
+            get { return trayIcon; }
+        }
 
         private async void InitKeyboardAfterStartup()
         {
@@ -617,16 +570,17 @@ namespace DimScreenSaver
         }
 
 
-        private void LoadHotRestartState()
+        public void LoadHotRestartState()
         {
             try
             {
-                Directory.CreateDirectory(Path.GetDirectoryName(StateFilePath));
+                var path = StateStorage.StateFilePath;
+                Directory.CreateDirectory(Path.GetDirectoryName(path));
 
-                if (!File.Exists(StateFilePath))
+                if (!File.Exists(path))
                     return;
 
-                var json = File.ReadAllText(StateFilePath);
+                var json = File.ReadAllText(path);
                 var state = JsonConvert.DeserializeObject<AppState>(json);
 
                 if (state != null && state.JavaFollowUpActive)
@@ -638,7 +592,7 @@ namespace DimScreenSaver
                    
                 }
                 // ❌ Usunięcie pliku, żeby nie zachował się do kolejnego uruchomienia
-                File.Delete(StateFilePath);
+                File.Delete(path);
             }
             catch (Exception ex)
             {
@@ -648,34 +602,12 @@ namespace DimScreenSaver
 
 
 
-        public static void HotRestart()
-        {
-            try
-            {
-                var state = new AppState
-                {
-                    JavaFollowUpActive = javaFollowUpActive,
-            
-                };
-                Directory.CreateDirectory(Path.GetDirectoryName(StateFilePath));
 
-                var json = JsonConvert.SerializeObject(state, Formatting.Indented);
-                File.WriteAllText(StateFilePath, json);
-                Log("💾 Zapisano stan HotRestart do pliku state.json");
-            }
-            catch (Exception ex)
-            {
-                Log($"❌ Błąd zapisu HotRestart: {ex.Message}");
-            }
 
-            if (Instance != null && Instance.trayIcon != null)
-            {
-                Instance.trayIcon.Visible = false;
-            }
-            Application.Restart();
-            Environment.Exit(0);
 
-        }
+
+
+
 
 
         private void LoadBrightnessMapFromSettings()
@@ -819,7 +751,7 @@ namespace DimScreenSaver
 
             /*
 
-            // 🧪 Test czkawki ticka
+            //🧪 Test czkawki ticka
             var simulateCzkawkaItem = new ToolStripMenuItem("🧪 Testuj czkawkę Ticka (10x recreate timer)");
             StyleMenuItem(simulateCzkawkaItem);
             simulateCzkawkaItem.Click += (s, e) =>
@@ -836,8 +768,8 @@ namespace DimScreenSaver
                 }
             };
             menu.Items.Add(simulateCzkawkaItem);
+            
             */
-
 
 
             // 🔧 Przyciemnianie po bezczynności
@@ -1847,14 +1779,26 @@ namespace DimScreenSaver
         {
             if (value >= 0 && value <= 100)
                 lastKnownBrightness = value;
+
             Log($"Ustawiam lastKnownBrightness na {value}");
+
             if (lastKnownBrightness != dimBrightnessPercent)
             {
-                File.WriteAllText(BrightnessPath, lastKnownBrightness.ToString());
-                Log($"[SetLastKnownBrightness()] Jasność zapisana do pliku: {lastKnownBrightness}%");
+                // odłóż zapis na wątek z puli, używając klasycznego File.WriteAllText
+                _ = Task.Run(() =>
+                {
+                    try
+                    {
+                        File.WriteAllText(BrightnessPath, lastKnownBrightness.ToString());
+                        Log($"[SetLastKnownBrightness()] Jasność zapisana do pliku: {lastKnownBrightness}%");
+                    }
+                    catch (Exception ex)
+                    {
+                        Log($"❌ Błąd zapisu BrightnessPath: {ex.Message}");
+                    }
+                });
             }
         }
-
 
         private int GetBacklightLevelForBrightness(int brightness)
         {
@@ -1938,7 +1882,7 @@ namespace DimScreenSaver
             {
                 try
                 {
-                    Log("Startuje Timer z SafeStartIdleCheckTimer()");
+                    Log("Startuję Timer z SafeStartIdleCheckTimer()");
                     lastSafeStartIdleCheckTimerRun = DateTime.Now;
                     idleCheckTimer.Start();
                 }
@@ -1950,6 +1894,77 @@ namespace DimScreenSaver
             }
         }
 
+
+
+
+        public void StartIdleWatchdog()
+        {
+            // jeśli już utworzony – anulujemy i stworzymy na nowo z odpowiednim interwałem
+            idleWatchdogTimer?.Change(Timeout.Infinite, Timeout.Infinite);
+            idleWatchdogTimer = new System.Threading.Timer(WatchdogCallback, null, 0, WatchdogIntervalMs);
+        }
+
+        private void WatchdogCallback(object _)
+        {
+            try
+            {
+                bool safeStartRecent = lastSafeStartIdleCheckTimerRun.HasValue
+                    && (DateTime.Now - lastSafeStartIdleCheckTimerRun.Value).TotalSeconds < 30;
+
+                // 1) Pominięcie przy safeStartRecent i ponowna proba za 30s
+                if (safeStartRecent)
+                {
+                    Log("🐶 Watchdog Idle: pomijam (SafeStart<30s), powtórzę za 30s");
+                    // przesuwamy kolejny wywołanie na 30 s, a potem znowu 2 min
+                    idleWatchdogTimer.Change(WatchdogRetryMs, WatchdogIntervalMs);
+                    return;
+                }
+
+                
+                // 2) Zbieranie innych powodów pominięcia
+                var powody = new List<string>();
+                if (isTemporarilyDisabled) powody.Add("isTemporarilyDisabled=true");
+                if (dimFormActive) powody.Add("dimFormActive=true");
+                if (GlobalScreenOff) powody.Add("GlobalScreenOff=true");
+               
+
+                // 3) Pominięcie, jśli któryś powód występuje, pomijamy
+                if (powody.Count > 0)
+                {
+                    Log("🐶 Watchdog Idle: pomijam sprawdzanie ticka przez: " + string.Join(", ", powody));
+                    return;
+                }
+
+                var last = lastIdleTickTime;
+                if (last == null)
+                {
+                    Log("🐶 Watchdog Idle: brak danych o ticku – nie robię nic.");
+                    return;
+                }
+
+                var diffMs = (DateTime.Now - last.Value).TotalMilliseconds;
+                if (diffMs > TimeSpan.FromMinutes(1).TotalMilliseconds)
+                {
+                    Thread.Sleep(100);
+                    Log("💣 Watchdog Idle: brak ticka – restartuję aplikacje.");
+                    Program.HotRestart();
+                }
+                else
+                {
+                    Log("🐶 Watchdog Idle: tick aktualny.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"❌ Watchdog Idle: błąd – {ex.Message}");
+            }
+        }
+
+
+
+
+        public static void ScheduleClearWakeState()
+    => _ = Task.Run(() => ClearWakeState());
 
         private void IdleCheckTimer_Tick(object sender, EventArgs e)
         {
@@ -1964,8 +1979,8 @@ namespace DimScreenSaver
 
                 if (recentTicks.Count > 1)
                 {
-                    Log("💣 Wykryto nadmiarowe ticki. Restartuje aplikacje.");
-                    HotRestart();
+                    Log("💣 Wykryto nadmiarowe ticki. Restartuję aplikację.");
+                    Program.HotRestart();
                 }
             }
             if (isTickRunning)
@@ -2066,7 +2081,7 @@ namespace DimScreenSaver
                         if (javaFollowUpActive)
                         {
                             Log("🛑 Pomijam wyłączenie ekranu – trwa sekwencja follow-up Java");
-                            BalloonForm.ShowBalloon($"Pominięto wyłączenie: {idleSeconds}s/{screenOffAfterSecondsRuntime}s", "Wiadomość oczekuje na Panelo", 8000, false);
+                            BalloonForm.ShowBalloon($"Pominięto wyłączenie: {idleSeconds}s/{screenOffAfterSecondsRuntime}s", "Wiadomość oczekuję na Panelo", 8000, false);
                         }
                         else
                         {
@@ -2088,12 +2103,12 @@ namespace DimScreenSaver
             }
         }
 
-
+        /*
         public void NotifyPowerEvent()
         {
             lastPowerEventTime = DateTime.Now;
             Log($"🔄 Blokada dimForm na {PowerEventSkipSeconds}s z NotifyPowerEvent() ");
-        }
+        }*/
 
         private async void ShowDimForm()
         {
@@ -2184,19 +2199,42 @@ namespace DimScreenSaver
 
                 if (currentBrightness != dimBrightnessPercent)
                 {
-                    File.WriteAllText(BrightnessPath, currentBrightness.ToString());
-                    Log($"[PRELOAD] Jasność zapisana do pliku: {currentBrightness}%");
+                    // odłóż zapis na wątek z puli
+                    _ = Task.Run(() =>
+                    {
+                        try
+                        {
+                            File.WriteAllText(BrightnessPath, currentBrightness.ToString());
+                            Log($"[PRELOAD] Jasność zapisana do pliku: {currentBrightness}%");
+                        }
+                        catch (Exception ex)
+                        {
+                            Log($"❌ Błąd zapisu jasności w MouseUp: {ex.Message}");
+                        }
+                    });
                 }
                 else
                 {
-                    if (File.Exists(BrightnessPath) && int.TryParse(File.ReadAllText(BrightnessPath), out int saved))
+                    // odkładamy odczyt na wątek z puli, aby nie blokować UI
+                    _ = Task.Run(() =>
                     {
-                        Log($"[PRELOAD] Pominięto zapis ({currentBrightness}%) – równa dimLevel, wczytano poprzednią: {saved}%");
-                    }
-                    else
-                    {
-                        Log($"[PRELOAD] Pominięto zapis ({currentBrightness}%) – równa dimLevel, brak pliku – fallback będzie 75%");
-                    }
+                        try
+                        {
+                            if (File.Exists(BrightnessPath) &&
+                                int.TryParse(File.ReadAllText(BrightnessPath), out int saved))
+                            {
+                                Log($"[PRELOAD] Pominięto zapis ({currentBrightness}%) – równa dimLevel, wczytano poprzednią: {saved}%");
+                            }
+                            else
+                            {
+                                Log($"[PRELOAD] Pominięto zapis ({currentBrightness}%) – równa dimLevel, brak pliku – fallback będzie 75%");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Log($"❌ Błąd odczytu BrightnessPath: {ex.Message}");
+                        }
+                    });
                 }
 
                 int idleNow = GetIdleTime() / 1000;
@@ -2545,6 +2583,64 @@ namespace DimScreenSaver
         }
 
 
+        public void CleanupHooks()
+        {
+            try
+            {
+                // 1) Globalny hook klawiatury
+                UnhookWindowsHookEx(_hookID);
+
+                // 2) Hook myszy do BrightnessForm
+                MouseHook.Stop();
+
+                // 3) WMI watcher
+                wmiWatcher?.Stop();
+                wmiWatcher?.Dispose();
+
+                // 4) PowerBroadcastWatcher
+                powerWatcher?.Dispose();
+
+                // 5) JavaWatcher
+                javaWatcher?.Dispose();
+
+                Log("✅ CleanupHooks: odłączono hooki i obserwatory");
+            }
+            catch (Exception ex)
+            {
+                Log($"❌ CleanupHooks – błąd: {ex.Message}");
+            }
+        }
+
+        public void StopTimers()
+        {
+            try
+            {
+                // główny idle timer
+                idleCheckTimer?.Stop();
+                idleCheckTimer?.Dispose();
+                idleCheckTimer = null;
+
+                // watchdog
+                idleWatchdogTimer?.Change(Timeout.Infinite, Timeout.Infinite);
+                idleWatchdogTimer?.Dispose();
+                idleWatchdogTimer = null;
+
+                // wakeup, Java i retry timery
+                wakeupTimer?.Dispose();
+                javaWatchdogTimer?.Dispose();
+                brightnessRetryTimer?.Stop();
+                brightnessRetryTimer?.Dispose();
+
+                Log("✅ StopTimers: wszystkie timery zatrzymane");
+            }
+            catch (Exception ex)
+            {
+                Log($"❌ StopTimers – błąd: {ex.Message}");
+            }
+        }
+
+
+
 
 
         //**********************************//
@@ -2597,6 +2693,50 @@ namespace DimScreenSaver
             }
         }
 
+        static class DebugPrivilege
+        {
+            const UInt32 SE_PRIVILEGE_ENABLED = 0x00000002;
+            const string SE_DEBUG_NAME = "SeDebugPrivilege";
+            const UInt32 TOKEN_ADJUST_PRIVILEGES = 0x0020;
+            const UInt32 TOKEN_QUERY = 0x0008;
+
+            [StructLayout(LayoutKind.Sequential)]
+            struct LUID { public UInt32 LowPart; public Int32 HighPart; }
+
+            [StructLayout(LayoutKind.Sequential)]
+            struct TOKEN_PRIVILEGES
+            {
+                public UInt32 PrivilegeCount;
+                public LUID Luid;
+                public UInt32 Attributes;
+            }
+
+            [DllImport("advapi32.dll", SetLastError = true)]
+            static extern bool OpenProcessToken(IntPtr hProcess, UInt32 desiredAccess, out IntPtr hToken);
+
+            [DllImport("advapi32.dll", SetLastError = true)]
+            static extern bool LookupPrivilegeValue(string lpSystemName, string lpName, out LUID lpLuid);
+
+            [DllImport("advapi32.dll", SetLastError = true)]
+            static extern bool AdjustTokenPrivileges(IntPtr TokenHandle, bool DisableAllPrivileges,
+                ref TOKEN_PRIVILEGES NewState, UInt32 BufferLength, IntPtr PreviousState, IntPtr ReturnLength);
+
+            public static bool Enable()
+            {
+                if (!OpenProcessToken(Process.GetCurrentProcess().Handle,
+                        TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, out var hToken))
+                    return false;
+                if (!LookupPrivilegeValue(null, SE_DEBUG_NAME, out var luid))
+                    return false;
+                var tp = new TOKEN_PRIVILEGES
+                {
+                    PrivilegeCount = 1,
+                    Luid = luid,
+                    Attributes = SE_PRIVILEGE_ENABLED
+                };
+                return AdjustTokenPrivileges(hToken, false, ref tp, (UInt32)Marshal.SizeOf(tp), IntPtr.Zero, IntPtr.Zero);
+            }
+        }
 
 
 
@@ -2790,8 +2930,20 @@ namespace DimScreenSaver
                         lastKnownBrightness = brightness;
                         if (brightness != dimBrightnessPercent)
                         {
-                            File.WriteAllText(BrightnessPath, brightness.ToString());
-                            Log($"[SUWAK] Jasność zapisana do pliku: {brightness}%");
+                            // odłóż zapis na wątek z puli
+                            _ = Task.Run(() =>
+                            {
+                                try
+                                {
+                                    File.WriteAllText(BrightnessPath, brightness.ToString());
+                                    Log($"[SUWAK] Jasność zapisana do pliku: {brightness}%");
+                                }
+                                catch (Exception ex)
+                                {
+                                    Log($"❌ Błąd zapisu jasności w MouseUp: {ex.Message}");
+                                }
+                            });
+                           
                         }
 
                     }, null);

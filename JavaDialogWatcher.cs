@@ -7,8 +7,11 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 
-public class JavaDialogWatcher
+public class JavaDialogWatcher : IDisposable
 {
+
+    private bool disposed = false;
+    private IntPtr monitoredWindow = IntPtr.Zero;
 
     [DllImport("user32.dll")]
     private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
@@ -84,6 +87,8 @@ public class JavaDialogWatcher
         LoopingMonitor_Tick(this, EventArgs.Empty);
     }
 
+
+
     // Wydzielona metoda z całą logiką Tick-a
     private void LoopingMonitor_Tick(object sender, EventArgs e)
     {
@@ -130,30 +135,9 @@ public class JavaDialogWatcher
     }
 
     public JavaDialogWatcher() { logPath = Path.Combine(Path.GetTempPath(), "scrlog.txt"); }
-    private static void Log(string msg) => AppLogger.Log("JavaWatcher", msg);
+    private static void Log(string msg) => _ = AppLogger.LogAsync("JavaWatcher", msg);
 
-    private void LogJava(string message)
-    {
 
-        string logEntry = $"[JavaWatcher] {DateTime.Now:HH:mm:ss} {message}";
-        try
-        {
-
-            const int maxLines = 5000;
-            List<string> lines = new List<string>();
-
-            if (File.Exists(logPath))
-            {
-                lines = File.ReadAllLines(logPath).ToList();
-                if (lines.Count >= maxLines)
-                    lines = lines.Skip(lines.Count - (maxLines - 1)).ToList();
-            }
-
-            lines.Add(logEntry);
-            File.WriteAllLines(logPath, lines);
-        }
-        catch { }
-    }
 
 
     private System.Windows.Forms.Timer disappearanceWatcher;
@@ -162,159 +146,155 @@ public class JavaDialogWatcher
 
     public void StartMonitoringDisappearance(IntPtr hwnd)
     {
-
+        monitoredWindow = hwnd;
         Log("▶ StartMonitor – zaczynam obserwację okna.");
         disappearanceWatcher = new System.Windows.Forms.Timer { Interval = 5_000 };
-        disappearanceWatcher.Tick += (s, e) =>
-        {
-            if (Process.GetProcessesByName("javaw").Length == 0)
-            {
-                Log("🟥 Proces javaw już nie istnieje – zatrzymuję obserwację.");
-                disappearanceWatcher.Stop();
-                isErrorSoundPlaying = false;
-                errorSoundPlayer?.Stop();
-                errorSoundPlayer = null;
-                errorBalloonCounter = 0;
-                targetWindow = IntPtr.Zero;
-                IdleTrayApp.javaFollowUpActive = false;
-                StartLoopingMonitor();
-                return;
-            }
-            if (!IsWindow(hwnd))
-            {
-                Log("🟥 Okno już nie istnieje (zamknięte) – przełączam z powrotem na tryb wyszukiwania.");
-                disappearanceWatcher.Stop();
-                targetWindow = IntPtr.Zero;
-                IdleTrayApp.javaFollowUpActive = false;
-                StartLoopingMonitor();
-                return;
-            }
-            LastTickTime = DateTime.Now;
-            bool visibleNow = simulateInvisible
-            // jeśli symulacja włączona, to zawsze false
-             ? false
-            // w przeciwnym razie odczyt z WinAPI
-             : IsWindowVisible(hwnd);
-
-
-            if (visibleNow && !wasPreviouslyVisible)
-            {
-                Log("🟢 Okno Panelo wróciło – zgłaszam do systemu.");
-                OnJavaDialogVisible?.Invoke();
-            }
-
-
-
-            if (wasPreviouslyVisible && !visibleNow)
-            {
-                if (!ShouldRun)
-                {
-                    Log("⛔ Monitoring wyłączony – ignoruję zniknięcie okna.");
-                    return;
-                }
-
-                if (IdleTrayApp.Instance != null && IdleTrayApp.Instance.monitorJavaDialog)
-                {
-                    Log("🕵️ Okno stało się niewidoczne – budzik aktywny, wybudzam i gram dźwięk!");
-                    DisplayControl.TurnOn();
-                    string pathToMp4 = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "alert.mp4");
-
-                    if (IdleTrayApp.UISyncContext != null)
-                    {
-                        IdleTrayApp.UISyncContext.Post(_ =>
-                        {
-                            IdleTrayApp.ResetByPopup();
-                            try
-                            {
-                                if (IdleTrayApp.CurrentFormVideoPlayer == null || IdleTrayApp.CurrentFormVideoPlayer.IsDisposed)
-                                {
-                                    IdleTrayApp.CurrentFormVideoPlayer = new FormVideoPlayer(pathToMp4);
-                                    Log("🆕 Tworzę nową instancję FormVideoPlayer");
-                                }
-
-                                if (!IdleTrayApp.CurrentFormVideoPlayer.Visible)
-                                {
-                                    IdleTrayApp.CurrentFormVideoPlayer.Show();
-                                    Log("▶ Pokazuję FormVideoPlayer");
-                                    
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                Log($"❌ Błąd podczas pokazywania FormVideoPlayer: {ex.Message}");
-                            }
-
-                        }, null);
-                    }
-                    else
-                    {
-                        Log("Brak SynchronizationContext – nie udało się pokazać formularza video.");
-                    }
-                }
-                else
-                {
-                    Log("🕵️ Okno zniknęło, ale budzik jest wyłączony – nie odtwarzam alertu.");
-                }
-            }
-
-            wasPreviouslyVisible = visibleNow;
-
-            bool errorWindowVisible = IsErrorDialogPresent();
-
-            if (errorWindowVisible && IdleTrayApp.Instance?.paneloErrorNotifyEnabled == true)
-            {
-                errorBalloonCounter++;
-
-                if (!isErrorSoundPlaying)
-                {
-                    try
-                    {
-                        string wavPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "error.wav");
-                        errorSoundPlayer = new System.Media.SoundPlayer(wavPath);
-                        errorSoundPlayer.PlayLooping();
-                        isErrorSoundPlaying = true;
-                        Log("🔊 Rozpoczęto odtwarzanie dźwięku błędu.");
-                        IdleTrayApp.ResetByPopup();
-                        BalloonForm.ShowBalloon("Błąd Panelo", "Zerwane połączenie", 20000, showIcons: false);
-                    }
-                    catch (Exception ex)
-                    {
-                        Log($"❌ Błąd podczas odtwarzania dźwięku błędu: {ex.Message}");
-                    }
-                }
-                else if (errorBalloonCounter % 6 == 0)
-                {
-                    BalloonForm.ShowBalloon("Błąd Panelo", "Zerwane połączenie", 20000, showIcons: false);
-                    Log("🔁 Odświeżono bąbelek błędu Panelo.");
-                }
-            }
-
-            else if (!errorWindowVisible && isErrorSoundPlaying)
-            {
-                // reset wszystkiego
-                try
-                {
-                    errorSoundPlayer?.Stop();
-                    errorSoundPlayer = null;
-                    isErrorSoundPlaying = false;
-                    errorBalloonCounter = 0;
-                    Log("🔇 Zatrzymano odtwarzanie dźwięku błędu.");
-                }
-                catch { }
-            }
-
-
-        };
-
-
-
-
-
-
+        disappearanceWatcher.Tick += DisappearanceWatcher_Tick;
         wasPreviouslyVisible = IsWindowVisible(hwnd);
         disappearanceWatcher.Start();
     }
 
+
+    private void DisappearanceWatcher_Tick(object sender, EventArgs e)
+    {
+        if (Process.GetProcessesByName("javaw").Length == 0)
+        {
+            Log("🟥 Proces javaw już nie istnieje – zatrzymuję obserwację.");
+            disappearanceWatcher.Stop();
+            isErrorSoundPlaying = false;
+            errorSoundPlayer?.Stop();
+            errorSoundPlayer = null;
+            errorBalloonCounter = 0;
+            targetWindow = IntPtr.Zero;
+            IdleTrayApp.javaFollowUpActive = false;
+            StartLoopingMonitor();
+            return;
+        }
+        if (!IsWindow(monitoredWindow))
+        {
+            Log("🟥 Okno już nie istnieje (zamknięte) – przełączam z powrotem na tryb wyszukiwania.");
+            disappearanceWatcher.Stop();
+            targetWindow = IntPtr.Zero;
+            IdleTrayApp.javaFollowUpActive = false;
+            StartLoopingMonitor();
+            return;
+        }
+        LastTickTime = DateTime.Now;
+        bool visibleNow = simulateInvisible
+         // jeśli symulacja włączona, to zawsze false
+         ? false
+         // w przeciwnym razie odczyt z WinAPI
+         : IsWindowVisible(monitoredWindow);
+
+
+        if (visibleNow && !wasPreviouslyVisible)
+        {
+            Log("🟢 Okno Panelo wróciło – zgłaszam do systemu.");
+            OnJavaDialogVisible?.Invoke();
+        }
+
+
+
+        if (wasPreviouslyVisible && !visibleNow)
+        {
+            if (!ShouldRun)
+            {
+                Log("⛔ Monitoring wyłączony – ignoruję zniknięcie okna.");
+                return;
+            }
+
+            if (IdleTrayApp.Instance != null && IdleTrayApp.Instance.monitorJavaDialog)
+            {
+                Log("🕵️ Okno stało się niewidoczne – budzik aktywny, wybudzam i gram dźwięk!");
+                DisplayControl.TurnOn();
+                string pathToMp4 = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "alert.mp4");
+
+                if (IdleTrayApp.UISyncContext != null)
+                {
+                    IdleTrayApp.UISyncContext.Post(_ =>
+                    {
+                        IdleTrayApp.ResetByPopup();
+                        try
+                        {
+                            if (IdleTrayApp.CurrentFormVideoPlayer == null || IdleTrayApp.CurrentFormVideoPlayer.IsDisposed)
+                            {
+                                IdleTrayApp.CurrentFormVideoPlayer = new FormVideoPlayer(pathToMp4);
+                                Log("🆕 Tworzę nową instancję FormVideoPlayer");
+                            }
+
+                            if (!IdleTrayApp.CurrentFormVideoPlayer.Visible)
+                            {
+                                IdleTrayApp.CurrentFormVideoPlayer.Show();
+                                Log("▶ Pokazuję FormVideoPlayer");
+
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Log($"❌ Błąd podczas pokazywania FormVideoPlayer: {ex.Message}");
+                        }
+
+                    }, null);
+                }
+                else
+                {
+                    Log("Brak SynchronizationContext – nie udało się pokazać formularza video.");
+                }
+            }
+            else
+            {
+                Log("🕵️ Okno zniknęło, ale budzik jest wyłączony – nie odtwarzam alertu.");
+            }
+        }
+
+        wasPreviouslyVisible = visibleNow;
+
+        bool errorWindowVisible = IsErrorDialogPresent();
+
+        if (errorWindowVisible && IdleTrayApp.Instance?.paneloErrorNotifyEnabled == true)
+        {
+            errorBalloonCounter++;
+
+            if (!isErrorSoundPlaying)
+            {
+                try
+                {
+                    string wavPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "error.wav");
+                    errorSoundPlayer = new System.Media.SoundPlayer(wavPath);
+                    errorSoundPlayer.PlayLooping();
+                    isErrorSoundPlaying = true;
+                    Log("🔊 Rozpoczęto odtwarzanie dźwięku błędu.");
+                    IdleTrayApp.ResetByPopup();
+                    BalloonForm.ShowBalloon("Błąd Panelo", "Zerwane połączenie", 20000, showIcons: false);
+                }
+                catch (Exception ex)
+                {
+                    Log($"❌ Błąd podczas odtwarzania dźwięku błędu: {ex.Message}");
+                }
+            }
+            else if (errorBalloonCounter % 6 == 0)
+            {
+                BalloonForm.ShowBalloon("Błąd Panelo", "Zerwane połączenie", 20000, showIcons: false);
+                Log("🔁 Odświeżono bąbelek błędu Panelo.");
+            }
+        }
+
+        else if (!errorWindowVisible && isErrorSoundPlaying)
+        {
+            // reset wszystkiego
+            try
+            {
+                errorSoundPlayer?.Stop();
+                errorSoundPlayer = null;
+                isErrorSoundPlaying = false;
+                errorBalloonCounter = 0;
+                Log("🔇 Zatrzymano odtwarzanie dźwięku błędu.");
+            }
+            catch { }
+        }
+
+
+    }
 
     public void ForceStopPaneloAlarm()
     {
@@ -447,4 +427,44 @@ public class JavaDialogWatcher
 
 
     }
+
+
+    /// <summary>
+    /// Zatrzymuje wszystkie timery i zamyka ewentualne okno Java.
+    /// </summary>
+    public void Dispose()
+    {
+        if (disposed) return;
+        disposed = true;
+
+        // 1. Zatrzymaj pętlę główną
+        ShouldRun = false;
+
+        // 2. Zatrzymaj i usuń loopTimer
+        if (loopTimer != null)
+        {
+            loopTimer.Stop();
+            loopTimer.Tick -= LoopingMonitor_Tick;   
+            loopTimer.Dispose();
+            loopTimer = null;
+        }
+
+        // 3. Zatrzymaj i usuń disappearanceWatcher
+        if (disappearanceWatcher != null)
+        {
+            disappearanceWatcher.Stop();
+            disappearanceWatcher.Tick -= DisappearanceWatcher_Tick;
+            disappearanceWatcher.Dispose();
+            disappearanceWatcher = null;
+        }
+
+        // 4. Zamknij okno video, jeśli jest otwarte
+        IdleTrayApp.CurrentFormVideoPlayer?.BeginInvoke((Action)(() =>
+        {
+            IdleTrayApp.CurrentFormVideoPlayer.Close();
+            IdleTrayApp.CurrentFormVideoPlayer.Dispose();
+        }));
+        IdleTrayApp.CurrentFormVideoPlayer = null;
+    }
+
 }

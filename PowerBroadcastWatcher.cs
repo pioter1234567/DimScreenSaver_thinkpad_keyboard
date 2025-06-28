@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 public class PowerBroadcastWatcher : NativeWindow, IDisposable
@@ -15,7 +16,7 @@ public class PowerBroadcastWatcher : NativeWindow, IDisposable
     private static readonly string logPath = Path.Combine(Path.GetTempPath(), "scrlog.txt");
 
     // Logger do konsoli lub pliku
-    private static void Log(string msg) => AppLogger.Log("PowerBroadcastWatcher", msg);
+    private static void Log(string msg) => _ = AppLogger.LogAsync("PowerBroadcastWatcher", msg);
 
     // Singleton
     public static PowerBroadcastWatcher Instance { get; private set; }
@@ -72,8 +73,9 @@ public class PowerBroadcastWatcher : NativeWindow, IDisposable
                 else
                     Log("🔀 Wykryto te same 3 eventy [GETTEXT, WINDOWPOSCHANGING, GETMINMAXINFO], w innej kolejności → podniesiono klapę?");
 
-                IdleTrayApp.Instance?.NotifyPowerEvent();
-                IdleTrayApp.ClearWakeState();
+                //Task.Run(() => IdleTrayApp.Instance?.NotifyPowerEvent());
+
+                IdleTrayApp.ScheduleClearWakeState(); 
             }
         }
 
@@ -84,8 +86,8 @@ public class PowerBroadcastWatcher : NativeWindow, IDisposable
             if (wparam == PBT_APMRESUMESUSPEND || wparam == PBT_APMRESUMEAUTOMATIC)
             {
                 Log($"🟢 System wznowiony z uśpienia (PBT: 0x{wparam:X})");
-                IdleTrayApp.Instance?.NotifyPowerEvent();
-                IdleTrayApp.ClearWakeState();
+                //IdleTrayApp.Instance?.NotifyPowerEvent();
+                IdleTrayApp.ScheduleClearWakeState(); 
             }
         }
 

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace DimScreenSaver
@@ -42,35 +43,8 @@ namespace DimScreenSaver
         }
 
         // Logi
-        private static void Log(string msg) => AppLogger.Log("MonitorStateWatcher", msg);
-        private static void LogMonitor(string message)
-        {
-            string logFile = logPath;
-            string logEntry = $"[MonitorStateWatcher] {DateTime.Now:HH:mm:ss} {message}";
-
-            try
-            {
-                const int maxLines = 5000;
-
-                // odczytaj istniejące linie (jeśli plik istnieje)
-                List<string> lines = new List<string>();
-                if (File.Exists(logFile))
-                {
-                    lines = File.ReadAllLines(logFile).ToList();
-
-                    // ogranicz do ostatnich maxLines - 1, zostaw miejsce na nowy wpis
-                    if (lines.Count >= maxLines)
-                        lines = lines.Skip(lines.Count - (maxLines - 1)).ToList();
-                }
-
-                // dodaj nową linię
-                lines.Add(logEntry);
-
-                // zapisz z powrotem
-                File.WriteAllLines(logFile, lines);
-            }
-            catch { }
-        }
+        private static void Log(string msg) => _ = AppLogger.LogAsync("MonitorStateWatcher", msg);
+       
         private class MessageWindow : NativeWindow, IDisposable
         {
             private const int WM_POWERBROADCAST = 0x0218;
@@ -110,13 +84,13 @@ namespace DimScreenSaver
                             {
                                 OnMonitorTurnedOn?.Invoke();
                                 Log("🟢 Ekran fizycznie się WŁĄCZYŁ");
-                                IdleTrayApp.Instance?.NotifyPowerEvent();
+                                //Task.Run(() => IdleTrayApp.Instance?.NotifyPowerEvent());
                             }
                             else
                             {
                                 OnMonitorTurnedOff?.Invoke();
                                 Log("🔴 [MonitorStateWatcher] Ekran fizycznie się WYŁĄCZYŁ");
-                                IdleTrayApp.Instance?.NotifyPowerEvent();
+                                //Task.Run(() => IdleTrayApp.Instance?.NotifyPowerEvent());
                             }
                         }
                     }

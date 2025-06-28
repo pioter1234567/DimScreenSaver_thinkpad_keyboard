@@ -48,7 +48,7 @@ public class FormVideoPlayer : Form
     private const int WM_KEYDOWN = 0x0100;
     private Point initialCursor;
     private System.Windows.Forms.Timer movementCheckTimer;
-    private static void Log(string msg) => AppLogger.Log("FormVideoPlayer", msg);
+    private static void Log(string msg) => _ = AppLogger.LogAsync("FormVideoPlayer", msg);
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
@@ -331,37 +331,14 @@ public class FormVideoPlayer : Form
         if (nCode >= 0 && wParam == (IntPtr)WM_KEYDOWN)
         {
             int vkCode = Marshal.ReadInt32(lParam);
-            Log($"⌨️ Naciśnięto klawisz globalnie: {vkCode} – próbuje zamknąć");
+            Log($"⌨️ Naciśnięto klawisz globalnie: {vkCode} – próbuję zamknąć");
             SpróbujZamknąć($"klawisz {vkCode}");
         }
 
         return CallNextHookEx(hookID, nCode, wParam, lParam);
     }
 
-    public static void LogVideo(string message)
-    {
-        string logFile = Path.Combine(Path.GetTempPath(), "scrlog.txt");
-        string logEntry = $"[FormVideoPlayer] {DateTime.Now:HH:mm:ss} {message}";
-
-        try
-        {
-            const int maxLines = 5000;
-
-            List<string> lines = new List<string>();
-            if (File.Exists(logFile))
-            {
-                lines = File.ReadAllLines(logFile).ToList();
-
-                if (lines.Count >= maxLines)
-                    lines = lines.Skip(lines.Count - (maxLines - 1)).ToList();
-            }
-
-            lines.Add(logEntry);
-            File.WriteAllLines(logFile, lines);
-        }
-        catch { }
-    }
-
+    
 
 
     private void CheckMouseDelta(object sender, MouseEventArgs e)
@@ -383,7 +360,7 @@ public class FormVideoPlayer : Form
             return;
         }
 
-        Log("Ruch wykryty – próbuje zamknąć");
+        Log("Ruch wykryty – próbuję zamknąć");
         SpróbujZamknąć($"ruch myszy Δx={dx}, Δy={dy}");
     }
 
@@ -460,7 +437,7 @@ public class InnerVideoForm : Form
 {
     private readonly AxWindowsMediaPlayer _wmp;
     private bool _isClosing = false;
-    private static void Log(string msg) => AppLogger.Log("InnerVideoForm", msg);
+    private static void Log(string msg) => _ = AppLogger.LogAsync("InnerVideoForm", msg);
     public void ForceStopAndClose()
     {
         if (_isClosing) return;
